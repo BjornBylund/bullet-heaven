@@ -1,0 +1,14 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "bullet-heaven",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "serve.py",
+        "5174"
+      ],
+      "port": 5174
+    }
+  ]
+}

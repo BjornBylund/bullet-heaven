@@ -1,0 +1,51 @@
+# ---------------------------------------------------------------------------
+# Bullet Heaven
+#
+# The game is plain static files with no build step, so there is almost nothing
+# generated to ignore. This is mostly about keeping editor config and OS
+# droppings out of a repo that is meant to be read.
+#
+# Deliberately NOT ignored, because they are part of the project:
+#   serve.py              the dev server. `python -m http.server` sends no cache
+#                         headers and silently serves stale ES modules, which
+#                         cost real debugging time, so the no-store server ships.
+#   tools/                the balance benches the README documents.
+#   docs/                 the design spec.
+#   .claude/launch.json   encodes "serve.py on port 5174" -- the documented way
+#                         to run this, useful to anyone who clones it.
+# ---------------------------------------------------------------------------
+
+# Python bytecode, from serve.py
+__pycache__/
+*.py[cod]
+
+# Node. There is no package.json today; this is for if tooling ever arrives.
+node_modules/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Claude Code: keep launch.json above, drop anything machine-specific
+.claude/settings.local.json
+.claude/*.local.json
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# Scratch
+*.log
+tmp/
+scratch/

@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Bullet Heaven</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { width:100%; height:100%; overflow:hidden; background:#05070c;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color:#e8eef7; user-select:none; -webkit-user-select:none; }
+  canvas { display:block; }
+
+  #ui { position:fixed; inset:0; pointer-events:none; z-index:10; }
+  #vignette { position:fixed; inset:0; pointer-events:none; z-index:9;
+    background: radial-gradient(ellipse at center, rgba(0,0,0,0) 45%, rgba(0,0,0,.55) 100%); }
+
+  /* ---- top: xp bar + readouts ---- */
+  #xpwrap { position:absolute; top:0; left:0; right:0; height:9px; background:#10141d;
+    border-bottom:1px solid #1d2432; }
+  #xpfill { height:100%; width:0%; background:linear-gradient(90deg,#3d7dff,#6fe0ff);
+    box-shadow:0 0 12px #3d7dffaa; transition:width .12s linear; }
+  #topbar { position:absolute; top:16px; left:0; right:0; display:flex;
+    justify-content:center; align-items:center; gap:28px; font-size:13px; letter-spacing:1px; }
+  #timer { font-size:26px; font-weight:700; letter-spacing:2px;
+    text-shadow:0 2px 10px #000, 0 0 22px #6fe0ff44; }
+  .stat { color:#8ea0bb; }
+  .stat b { color:#e8eef7; font-weight:700; }
+
+  /* ---- bottom: hp bar + spell/passive slots ---- */
+  #bottom { position:absolute; bottom:18px; left:0; right:0;
+    display:flex; flex-direction:column; align-items:center; gap:10px; }
+  #hpwrap { width:340px; max-width:56vw; height:16px; background:#12161f;
+    border:1px solid #232c3d; border-radius:9px; overflow:hidden; position:relative; }
+  #hpfill { height:100%; width:100%; background:linear-gradient(90deg,#c0392b,#ff6b5a);
+    transition:width .1s linear; }
+  #hptext { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    font-size:11px; font-weight:700; text-shadow:0 1px 3px #000; }
+  #slots { display:flex; gap:16px; align-items:center; }
+  .slotrow { display:flex; gap:6px; }
+  .slot { width:36px; height:36px; border-radius:8px; background:#111722;
+    border:1px solid #232c3d; display:flex; align-items:center; justify-content:center;
+    font-size:17px; position:relative; }
+  .slot .lv { position:absolute; bottom:-2px; right:2px; font-size:9px; font-weight:700;
+    color:#cfe0ff; text-shadow:0 1px 2px #000; }
+  .slot .nodes { position:absolute; top:-3px; left:2px; font-size:8px; color:#7f92ad; }
+
+  /* runes waiting to be placed -- the failure mode of the inventory model is a
+     player who never opens the editor, so this pulses until it is dealt with */
+  /* Boss health: deliberately the widest, highest-contrast element on screen.
+     During a fight it is the one number that matters. */
+  #bosswrap { position:absolute; top:52px; left:50%; transform:translateX(-50%);
+    width:min(620px, 72vw); display:none; text-align:center; }
+  #bosswrap.show { display:block; }
+  #bossname { font-size:12px; letter-spacing:3px; font-weight:700;
+    color:#ffe9ef; text-shadow:0 0 10px rgba(0,0,0,0.9); margin-bottom:5px; }
+  #bossbar { position:relative; height:11px; border-radius:6px; overflow:hidden;
+    background:rgba(10,6,12,0.82); box-shadow:0 0 0 1px rgba(255,255,255,0.16),
+    0 3px 14px rgba(0,0,0,0.6); }
+  #bossfill { height:100%; width:100%; border-radius:6px;
+    /* neutral default; ui.js repaints this with the live boss's own colour */
+    background:linear-gradient(180deg, #cfd8ea, #6b7590);
+    transition:width 0.12s linear; }
+  /* phase thresholds, so you can see the next escalation coming */
+  #bossbar .pip { position:absolute; top:0; width:2px; height:100%;
+    background:rgba(0,0,0,0.55); }
+
+  #bosswarn { position:absolute; top:26%; left:0; right:0; text-align:center;
+    opacity:0; transition:opacity 0.25s ease; pointer-events:none; }
+  #bosswarn.show { opacity:1; }
+  #bosswarn .wl { font-size:12px; letter-spacing:6px; color:#ffc861; }
+  #bosswarn .wn { font-size:40px; font-weight:800; letter-spacing:2px;
+    color:#fff; text-shadow:0 0 26px rgba(255,190,90,0.8); margin:2px 0; }
+  #bosswarn .wt { font-size:12px; letter-spacing:3px; color:#c9b8c4; }
+
+  #nag { pointer-events:auto; cursor:pointer; font-size:11px; letter-spacing:1px;
+    padding:6px 12px; border-radius:20px; border:1px solid #4d8fff;
+    background:#16243d; color:#bcd9ff; animation:pulse 1.4s ease-in-out infinite; display:none; }
+  #nag.on { display:block; }
+  @keyframes pulse { 0%,100%{ box-shadow:0 0 0 0 #4d8fff66 } 50%{ box-shadow:0 0 0 7px #4d8fff00 } }
+
+  /* ---- modal panels ---- */
+  .panel { position:absolute; inset:0; display:none; align-items:center; justify-content:center;
+    flex-direction:column; gap:22px; background:rgba(5,7,12,.86);
+    backdrop-filter:blur(3px); pointer-events:auto; padding:24px; }
+  .panel.show { display:flex; }
+  .panel h1 { font-size:40px; letter-spacing:6px; font-weight:800;
+    text-shadow:0 0 30px #6fe0ff55; }
+  .panel h2 { font-size:19px; letter-spacing:3px; color:#9fb4d4; font-weight:600; }
+  .hint { font-size:12px; color:#64748b; letter-spacing:1px; line-height:1.9; text-align:center; }
+
+  #cards { display:flex; gap:16px; flex-wrap:wrap; justify-content:center; max-width:960px; }
+  .card { width:220px; background:#0e1421; border:1px solid #223049; border-radius:14px;
+    padding:18px 16px; cursor:pointer; text-align:center; transition:transform .1s, border-color .1s, box-shadow .1s; }
+  .card:hover { transform:translateY(-4px); border-color:#4d8fff; box-shadow:0 10px 34px #0008, 0 0 0 1px #4d8fff44; }
+  .card .ico { font-size:34px; line-height:1.3; }
+  .card .nm { font-size:14px; font-weight:700; letter-spacing:1px; margin-top:4px; }
+  .card .pill { display:inline-block; margin-top:7px; font-size:10px; letter-spacing:1px;
+    padding:2px 9px; border-radius:20px; background:#1b2436; color:#9fc4ff; }
+  .card .pill.new { background:#1d3a2a; color:#79e0a4; }
+  .card .ds { font-size:11.5px; color:#8ea0bb; margin-top:10px; line-height:1.55; min-height:50px; }
+  .card kbd { display:inline-block; margin-top:8px; font-size:10px; color:#64748b;
+    border:1px solid #2a3547; border-radius:4px; padding:1px 6px; }
+  .card .csub { font-size:10.5px; color:#6b7c94; margin-top:7px; letter-spacing:1px; }
+  /* tier glow, applied as a shadow so it survives the inline border colour */
+  .card.tier-rare { box-shadow:0 0 0 1px #3f6fae77, inset 0 0 26px #1b3a6633; }
+  .card.tier-epic { box-shadow:0 0 0 1px #8a5fc499, inset 0 0 28px #5b2a8f44; }
+
+  .btn { pointer-events:auto; cursor:pointer; font-family:inherit; font-size:13px;
+    letter-spacing:2px; font-weight:700; padding:13px 30px; border-radius:10px;
+    background:#1a3a6b; color:#dbeaff; border:1px solid #2f5fa8; }
+  .btn:hover { background:#24508f; }
+  .btn.small { padding:7px 16px; font-size:11px; letter-spacing:1px; }
+
+  #results { display:grid; grid-template-columns:auto auto; gap:8px 26px; font-size:14px; }
+  #results .k { color:#8ea0bb; text-align:right; letter-spacing:1px; }
+  #results .v { font-weight:700; }
+  #gameover h1 { color:#ff7a6b; text-shadow:0 0 30px #ff7a6b44; }
+
+  /* ---- character select ---- */
+  #chars { display:flex; gap:18px; flex-wrap:wrap; justify-content:center; }
+  .chr { width:230px; background:#0e1421; border:1px solid #223049; border-radius:14px;
+    padding:22px 18px; cursor:pointer; text-align:center; transition:transform .1s, border-color .1s; }
+  .chr:hover { transform:translateY(-4px); border-color:#4d8fff; }
+  .chr .ico { font-size:40px; }
+  .chr .nm { font-size:15px; font-weight:700; letter-spacing:2px; margin-top:8px; }
+  .chr .ds { font-size:11.5px; color:#8ea0bb; margin-top:12px; line-height:1.6; }
+
+  /* ---- spell editor: node graph ---- */
+  #editor { justify-content:flex-start; padding:0; }
+  #edwrap { width:min(1240px, 98vw); height:min(800px, 96vh); margin-top:2vh;
+    display:flex; flex-direction:column; background:#070b14;
+    border:1px solid #223049; border-radius:16px; overflow:hidden; }
+  #edhead { display:flex; align-items:center; gap:14px; padding:12px 18px;
+    border-bottom:1px solid #1b2332; background:#0b1120; }
+  #edtabs { display:flex; gap:8px; }
+  .edtab { padding:7px 13px; border-radius:9px; background:#111825; border:1px solid #223049;
+    cursor:pointer; font-size:13px; display:flex; align-items:center; gap:7px; }
+  .edtab.sel { border-color:#4d8fff; background:#16243d; }
+  .edtab .tn { font-size:10px; color:#7f92ad; }
+  #edstats { margin-left:auto; display:flex; gap:16px; font-size:12px; letter-spacing:1px; }
+  #edstats span { color:#7f92ad; }
+  #edstats span b { color:#e8eef7; }
+  #edstats .over b { color:#ff7a6b; }
+
+  #edbody { flex:1; display:flex; min-height:0; }
+  .edpane { width:266px; padding:14px; overflow-y:auto; background:#050910; }
+  #edleft { border-right:1px solid #1b2332; }
+  #edright { border-left:1px solid #1b2332; }
+  .edpane h3 { font-size:10px; letter-spacing:2px; color:#6b7c94; font-weight:700; margin-bottom:10px; }
+
+  /* the graph itself */
+  #edgraph { flex:1; overflow:auto; position:relative; background:
+    radial-gradient(circle at 50% 38%, #0d1524 0%, #070b14 70%); }
+  #edcanvas { position:relative; margin:26px auto; }
+  #edlinks { position:absolute; left:0; top:0; overflow:visible; pointer-events:none; }
+  #ednodes { position:absolute; left:0; top:0; }
+
+  .gnode { position:absolute; width:52px; height:58px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; font-size:21px;
+    transition:transform .08s; }
+  .gnode:hover { transform:scale(1.08); }
+  .gnode { touch-action:none; }
+  .gnode.grabbable { cursor:grab; }
+  /* the hexagon lives on inner layers so badges are not clipped away */
+  .gnode .hexo, .gnode .inner { position:absolute; pointer-events:none;
+    clip-path:polygon(50% 0%, 94% 25%, 94% 75%, 50% 100%, 6% 75%, 6% 25%); }
+  .gnode .hexo { inset:0; background:#16202f; }
+  .gnode .inner { inset:2px; background:#0d1421; }
+  .gnode .glyph { position:relative; z-index:2; pointer-events:none; }
+  .gnode .lvl { position:absolute; bottom:4px; right:8px; z-index:3; font-size:9px;
+    font-weight:700; color:#fff; text-shadow:0 1px 3px #000; pointer-events:none; }
+  .gnode .links { position:absolute; top:-9px; right:-7px; z-index:3; font-size:8.5px;
+    color:#8ea0bb; background:#0b1120; border:1px solid #24324a; border-radius:8px;
+    padding:0 4px; pointer-events:none; letter-spacing:.5px; }
+  .gnode.sel .inner { background:#24406d; }
+  .gnode.trig .hexo { filter:drop-shadow(0 0 7px currentColor); }
+  .gnode.empty .hexo { background:#1a2333; }
+  .gnode.empty .inner { background:#080d16; }
+  .gnode.empty .glyph { color:#3d4c63; font-size:17px; }
+  .gnode.empty.full { opacity:.3; }
+  .gnode.root .glyph { font-size:24px; }
+  .gnode.dragging { opacity:.35; }
+  /* drop affordance: valid targets are marked at dragstart, not discovered */
+  .gnode.drop-ok .hexo { background:#3fae78; }
+  .gnode.drop-ok .inner { background:#123322; }
+  .gnode.drop-ok .glyph { color:#8ef0bb !important; }
+  .gnode.drop-hot { transform:scale(1.2); }
+  #edright.drop-hot { background:#160f14; box-shadow:inset 0 0 0 2px #ae3f5f88; }
+  /* the dragged rune follows the cursor; it must never catch its own hit-test */
+  #edghost { position:fixed; z-index:60; pointer-events:none; width:46px; height:52px;
+    margin-left:-23px; margin-top:-26px; display:flex; align-items:center;
+    justify-content:center; font-size:20px; background:#16202f;
+    clip-path:polygon(50% 0%, 94% 25%, 94% 75%, 50% 100%, 6% 75%, 6% 25%);
+    opacity:.92; filter:drop-shadow(0 6px 14px #000a); }
+
+  /* side-panel cards, styled after the in-game Memory card */
+  .edcard { border:1px solid #223049; border-radius:12px; padding:14px; background:#0b1220; }
+  .edcard.tier-rare { border-color:#3f6fae; box-shadow:inset 0 0 22px #1b3a6633; }
+  .edcard.tier-epic { border-color:#8a5fc4; box-shadow:inset 0 0 22px #5b2a8f33; }
+  .edcard .ct { font-size:10px; letter-spacing:2px; color:#7f92ad; }
+  .edcard .cn { font-size:15px; font-weight:700; margin:5px 0 8px; letter-spacing:1px; }
+  .edcard .cd { font-size:11.5px; color:#9fb4d4; line-height:1.65; }
+  .edcard .cs { margin-top:10px; font-size:11px; color:#8ea0bb; line-height:1.9; }
+  .edcard .cs b { color:#e8eef7; }
+  .edcard .cf { margin-top:11px; padding-top:9px; border-top:1px solid #1c2739;
+    font-size:10.5px; color:#6b7c94; letter-spacing:.5px; }
+  .edcard .when { display:inline-block; margin-bottom:8px; font-size:10px; letter-spacing:1px;
+    padding:3px 10px; border-radius:20px; background:#3a2a12; color:#ffc861; }
+  .edacts { display:flex; gap:7px; margin-top:12px; }
+  .nbtn { cursor:pointer; border:1px solid #2a3547; background:#16202f; color:#bcd9ff;
+    border-radius:7px; font-size:11px; padding:6px 11px; font-family:inherit; flex:1; }
+  .nbtn:hover { background:#1f2d42; border-color:#4d8fff; }
+  .nbtn:disabled { opacity:.32; cursor:default; }
+
+  .inv { cursor:grab; touch-action:none; display:flex; align-items:center; gap:9px; padding:8px 10px; margin-bottom:5px;
+    background:#0b1220; border:1px solid #1c2739; border-radius:8px; cursor:pointer; font-size:12px; }
+  .inv:hover { border-color:#3a5a8c; }
+  .inv.sel { border-color:#4d8fff; background:#16243d; }
+  .inv.tier-rare .ii { text-shadow:0 0 9px #6fb4ff; }
+  .inv.tier-epic .ii { text-shadow:0 0 9px #c98bff; }
+  .inv .ii { font-size:16px; width:20px; text-align:center; }
+  .inv .nn { font-weight:700; }
+  .inv .ik { font-size:9px; color:#5c6b82; letter-spacing:1px; }
+  .inv .ic { margin-left:auto; font-size:11px; color:#7f92ad; }
+  #edempty { color:#5c6b82; font-size:11.5px; line-height:1.7; }
+  #edmsg { padding:9px 18px; border-top:1px solid #1b2332; font-size:11.5px;
+    color:#8ea0bb; min-height:34px; background:#0b1120; letter-spacing:.5px; }
+  /* the damage a rune costs its spell -- warn colour, never the reserved red */
+  .cd .pen { display:block; margin-top:6px; color:#ffb36e; font-weight:600; }
+  #edmsg.err { color:#ff9a8a; }
+</style>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="vignette"></div>
+
+  <div id="ui">
+    <div id="xpwrap"><div id="xpfill"></div></div>
+    <div id="bosswrap">
+      <div id="bossname">BOSS</div>
+      <div id="bossbar">
+        <div id="bossfill"></div>
+        <i class="pip" style="left:66%"></i>
+        <i class="pip" style="left:33%"></i>
+      </div>
+    </div>
+
+    <div id="bosswarn">
+      <div class="wl">&#9888; APPROACHING</div>
+      <div class="wn" id="bosswarnname"></div>
+      <div class="wt" id="bosswarntitle"></div>
+    </div>
+
+    <div id="topbar">
+      <div class="stat">LV <b id="level">1</b></div>
+      <div id="timer">00:00</div>
+      <div class="stat">KILLS <b id="kills">0</b></div>
+    </div>
+
+    <div id="bottom">
+      <div id="nag">RUNES UNPLACED &mdash; PRESS E</div>
+      <div id="slots">
+        <div class="slotrow" id="wslots"></div>
+        <div class="slotrow" id="pslots"></div>
+      </div>
+      <div id="hpwrap">
+        <div id="hpfill"></div>
+        <div id="hptext">100 / 100</div>
+      </div>
+    </div>
+
+    <!-- start / character select -->
+    <div class="panel show" id="start">
+      <h1>BULLET HEAVEN</h1>
+      <h2>CHOOSE YOUR FIRST SPELL</h2>
+      <div id="chars"></div>
+      <div class="hint">
+        WASD / ARROWS to move &nbsp;&bull;&nbsp; spells cast themselves<br>
+        1-4 or click to take an upgrade &nbsp;&bull;&nbsp; E to open the spell editor<br>
+        ESC to pause
+      </div>
+    </div>
+
+    <!-- level up -->
+    <div class="panel" id="levelup">
+      <h2 id="lvtitle">LEVEL UP</h2>
+      <div id="cards"></div>
+    </div>
+
+    <!-- spell editor -->
+    <div class="panel" id="editor">
+      <div id="edwrap">
+        <div id="edhead">
+          <div id="edtabs"></div>
+          <div id="edstats"></div>
+          <button class="btn small" id="edclose">CLOSE &nbsp;E</button>
+        </div>
+        <div id="edbody">
+          <div class="edpane" id="edleft"></div>
+          <div id="edgraph">
+            <div id="edcanvas">
+              <svg id="edlinks"></svg>
+              <div id="ednodes"></div>
+            </div>
+          </div>
+          <div class="edpane" id="edright">
+            <h3>RUNES HELD</h3>
+            <div id="edinv"></div>
+          </div>
+        </div>
+        <div id="edmsg"></div>
+      </div>
+    </div>
+
+    <!-- paused -->
+    <div class="panel" id="paused">
+      <h1>PAUSED</h1>
+      <div class="hint">ESC to resume &nbsp;&bull;&nbsp; E for the spell editor</div>
+    </div>
+
+    <!-- game over -->
+    <div class="panel" id="gameover">
+      <h1 id="gotitle">YOU DIED</h1>
+      <div id="results"></div>
+      <button class="btn" id="againbtn">RUN IT BACK</button>
+    </div>
+  </div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
