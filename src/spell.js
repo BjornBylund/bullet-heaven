@@ -25,7 +25,6 @@ import { BURN } from './status.js';
  */
 
 export const MAX_DEPTH = 3;          // trigger nesting, not tree depth
-const MAX_GATES = 48;
 
 export const makeSpell = (focusId) => ({ focus: focusId, children: [] });
 export const makeEntry = (id) => ({ id, level: 1, children: [] });
@@ -202,8 +201,6 @@ export function canLevel(spell, entry, caps) {
 // compiler
 // ---------------------------------------------------------------------------
 
-let gateCounter = 0;
-export function resetGates() { gateCounter = 0; }
 
 /** Default look per Focus; a trigger effect overrides it with its own. */
 const DEFAULT_LOOK = { projectile: 'bolt', burst: 'shock', field: 'aura' };
@@ -220,7 +217,11 @@ function descriptor(kind, color, depth, base, baseFlags) {
     look: DEFAULT_LOOK[kind],
     def: { color },
     depth,
-    gate: gateCounter++ % MAX_GATES,
+    cap: 0,              // 0 = use the global field cap; see emitField
+    evictOldest: 0,      // at the cap: drop the oldest instead of refusing the new
+    alpha: 0,            // 0 = use the look's own alpha
+    spacing: 0,          // trail only: px between dripped patches
+
     stats: Object.assign({}, base),
     flags: Object.assign(newFlags(), baseFlags || null),
     statuses: [],
@@ -326,12 +327,45 @@ function finalise(c) {
   if (c.flags.trail > 0 && c.focusId === 'projectile') c.trail = makeTrail(c);
 }
 
+/**
+ * The burning trail dripped behind a projectile.
+ *
+ * Everything here is fighting one tension: it has to be clearly visible on a
+ * busy field, without becoming the field. Four things are tuned against that,
+ * and getting any of them wrong swamps the screen:
+ *
+ *   LOOK     aura -- a soft round glow. The flame texture was tried and is
+ *            wrong here: it is a lobed flame shape, and forty of them laid
+ *            along a line read as overlapping brown clouds rather than one
+ *            burning streak. Round glows merge; shaped sprites tile.
+ *   ALPHA    roughly double aura's usual 0.24, which is what makes it visible.
+ *            Not more: these are additive and laid dozens deep, and at full
+ *            weight they blow out into solid ropes across the whole screen.
+ *   SPACING  wide enough that patches overlap rather than stack. Tighter
+ *            spacing does not make a longer trail, only a denser one.
+ *   COLOUR   fire, not the Focus colour it used to inherit. It applies Burn and
+ *            the player calls it a fire trail; a cyan one contradicts both.
+ *
+ * It also carries its own `cap`, because the shared field ceiling is sized for
+ * single dropped effects and cut the trail to about a sixth of its length.
+ */
+const TRAIL_FIRE = 0xff7a3c;
+
 function makeTrail(parent) {
   const strength = parent.flags.trail;
-  const c = descriptor('field', parent.def.color, parent.depth, FOCUSES.field.base);
-  c.stats.dmg = parent.stats.dmg * 0.16 * strength;
-  c.stats.range = 22 + 6 * strength;
-  c.stats.life = 1.1 + 0.6 * strength;
+  const c = descriptor('field', TRAIL_FIRE, parent.depth, FOCUSES.field.base);
+  c.look = 'aura';
+  c.alpha = 0.50;
+  c.spacing = 58;
+  c.cap = CFG.spell.trailCap;
+  c.evictOldest = 1;        // truncate the tail, never the head
+  // Down hard from 0.16. Uncapping the trail took it from six patches to forty
+  // and the longer life added more again, so holding the old coefficient would
+  // have turned a visibility fix into a two-and-a-half times damage buff that
+  // nobody asked for.
+  c.stats.dmg = parent.stats.dmg * 0.075 * strength;
+  c.stats.range = 22 + 5 * strength;
+  c.stats.life = 2.0 + 0.8 * strength;
   c.stats.tick = 0.25;
   c.flags.anchor = 1;
   c.statuses.push({ idx: BURN, stacks: 1, magFrac: 0.22 });
@@ -342,7 +376,10 @@ function makeTrail(parent) {
 export function compile(spell, caps) {
   const def = FOCUSES[spell.focus];
   const empty = caps ? Math.max(0, caps.nodes - countNodes(spell)) : 0;
-  const c = descriptor(spell.focus, def.color, 1, def.base, def.baseFlags);
+  // `def.kind` is the entity kind, which is not always the focus id: Cone is a
+  // Projectile wearing different flags.
+  const c = descriptor(def.kind, def.color, 1, def.base, def.baseFlags);
+  if (def.look) c.look = def.look;
   fill(c, spell, 1, { empty });
   finalise(c);
   return c;

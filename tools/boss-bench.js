@@ -142,7 +142,7 @@ window.__bossBench = async function bossBench(opts) {
   for (let i = 0; i < boss.BOSS_IDS.length; i++) {
     const bossId = boss.BOSS_IDS[i];
     const atSec = arrivalOf(i);
-    for (const focusId of ['projectile', 'burst', 'field']) {
+    for (const focusId of ['projectile', 'cone', 'burst']) {
       const row = await run(focusId, bossId, atSec);
       row.atMinute = +(atSec / 60).toFixed(1);
       out[bossId + '/' + focusId] = row;

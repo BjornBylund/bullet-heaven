@@ -2,7 +2,7 @@ import { G } from './state.js';
 import { CFG } from './config.js';
 import { RUNES } from './runes.js';
 import {
-  makeSpell, compile, resetGates, resolve, place, remove, move,
+  makeSpell, compile, resolve, place, remove, move,
   canPlace, canLevel, canMove, countNodes, countAttunement,
 } from './spell.js';
 import { castSpell } from './cast.js';
@@ -58,10 +58,8 @@ export function addSpell(focusId) {
   return entry;
 }
 
-/** One pass, so gate channels stay dense and inside their bound. */
 export function recompileAll() {
   const b = G.player.book;
-  resetGates();
   // caps are passed through because positional runes read the free-socket count
   for (const e of b.spells) e.compiled = compile(e.spell, b.caps);
 }

@@ -193,7 +193,7 @@ parent's.
 
 | Condition | Fires when |
 |---|---|
-| **On Cast** | the parent is created |
+| **On Spawn** | each ENTITY the parent creates. A three-bolt Cone fires it three times, once per bolt and from that bolt's own position and heading. Was per-cast, which did not scale with Split. |
 | **On Hit** | the parent damages anything |
 | **On Kill** | the parent's damage kills |
 | **On Distance** | the parent has travelled 60% of Range |

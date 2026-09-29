@@ -5,7 +5,9 @@ import { CHILL, BURN, WEAKEN, BRITTLE } from './status.js';
  *
  * Two kinds only:
  *
- *   TRIGGER  - a complete effect with a condition. It casts something of its
+ *   TRIGGER  - a complete effect with a condition. `On Spawn` fires once per
+ *              ENTITY the parent creates, so a three-bolt Cone fires it three
+ *              times; the other conditions already scaled that way. It casts something of its
  *              own, for a PERCENTAGE of the damage of the Spell or Trigger
  *              above it. Triggers are not plumbing you have to fill; socketing
  *              one immediately does something.
@@ -98,35 +100,35 @@ export const TRIGGERS = {
 
   spiralingRage: {
     name: 'Spiraling Rage', icon: '@', color: 0xff9a5c,
-    tier: 'common', cost: 1, when: 'cast',
+    tier: 'common', cost: 1, when: 'spawn',
     effect: {
       kind: 'projectile', count: [1, 1, 2], spiral: 3.2, look: 'flame',
       dmgPct: [0.45, 0.80, 1.50], speed: 200, range: 520, size: 11,
       status: { idx: BURN, stacks: [1, 1, 2] },
     },
-    desc: (l) => `On cast, casts a fire projectile that spirals outward. ` +
+    desc: (l) => `On spawn, casts a fire projectile that spirals outward. ` +
                  `Damage ${Math.round(lv([0.45, 0.80, 1.50], l) * 100)}%.`,
   },
 
   rollingStone: {
     name: 'Rolling Stone', icon: '●', color: 0xb0a48c,
-    tier: 'rare', cost: 2, when: 'cast',
+    tier: 'rare', cost: 2, when: 'spawn',
     effect: {
       kind: 'projectile', count: 1, pierce: 99, look: 'stone',
       dmgPct: [0.25, 0.40, 0.70], speed: 190, range: 700, size: 22,
     },
-    desc: (l) => `On cast, rolls a boulder that ploughs through everything. ` +
+    desc: (l) => `On spawn, rolls a boulder that ploughs through everything. ` +
                  `Damage ${Math.round(lv([0.25, 0.40, 0.70], l) * 100)}%.`,
   },
 
   solidDefense: {
     name: 'Solid Defense', icon: '◆', color: 0x9aa4b2,
-    tier: 'common', cost: 1, when: 'cast',
+    tier: 'common', cost: 1, when: 'spawn',
     effect: {
       kind: 'field', count: [2, 2, 3], orbit: true, look: 'stone',
       dmgPct: [0.60, 0.60, 0.60], range: 90, life: 5.5, tick: 0.3, size: 26,
     },
-    desc: (l) => `On cast, sets ${lv([2, 2, 3], l)} stones orbiting you. Damage 60%.`,
+    desc: (l) => `On spawn, sets ${lv([2, 2, 3], l)} stones orbiting you. Damage 60%.`,
   },
 
   gustOfWind: {
@@ -142,13 +144,13 @@ export const TRIGGERS = {
 
   flashOfSwords: {
     name: 'Flash of Swords', icon: '⚔', color: 0xffe066,
-    tier: 'rare', cost: 2, when: 'cast',
+    tier: 'rare', cost: 2, when: 'spawn',
     effect: {
       kind: 'field', count: [2, 3, 4], orbit: true, look: 'blade',
       dmgPct: [0.20, 0.35, 0.60], range: 130, life: 3.2, tick: 0.22, size: 20,
       crit: [0.05, 0.10, 0.20],
     },
-    desc: (l) => `On cast, spins ${lv([2, 3, 4], l)} blades around you. ` +
+    desc: (l) => `On spawn, spins ${lv([2, 3, 4], l)} blades around you. ` +
                  `Damage ${Math.round(lv([0.20, 0.35, 0.60], l) * 100)}% · ` +
                  `Critical ${pct(lv([0.05, 0.10, 0.20], l))}.`,
   },
@@ -298,8 +300,11 @@ export const MODIFIERS = {
       c.flags.split += lv([1, 2, 3], l);
       c.stats.life = (c.stats.life || 2) * (1 + lv([0.8, 1.5, 2.7], l));
     },
+    // The size reduction is stated because it used to be silent: socketing this
+    // on a Field shrank it and players read that as their size runes failing.
     desc: (l) => `Adds orbiting movement · Spawn count +${lv([1, 2, 3], l)} · ` +
-                 `Duration ${pct(lv([0.8, 1.5, 2.7], l))}.`,
+                 `Duration ${pct(lv([0.8, 1.5, 2.7], l))} · ` +
+                 `An orbiting area is smaller than a still one.`,
   },
 
   firewalking: {

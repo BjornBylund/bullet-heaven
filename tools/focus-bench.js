@@ -90,7 +90,9 @@ window.__bench = async function bench(opts) {
 
   const TRIGGER = [{ id: 'cruelThorns', level: 1, children: [] }];
   const out = { mode: crowd ? 'crowd (130 targets)' : 'single target' };
-  for (const focus of ['projectile', 'burst', 'field']) {
+  // Field is no longer a playable Focus -- it survives only as the entity kind
+  // that trigger effects and the fire trail compile from.
+  for (const focus of ['projectile', 'cone', 'burst']) {
     const bare = run(focus, []);
     const withTrig = run(focus, TRIGGER);
     out[focus] = {

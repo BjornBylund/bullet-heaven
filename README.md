@@ -34,8 +34,31 @@ creates entities in the world:
 | Focus | What it does | `Range` means |
 |---|---|---|
 | **Projectile** | travels a vector from you | travel distance |
+| **Cone** | three bolts in a fan | travel distance |
 | **Burst** | expands outward from a point | radius |
-| **Field** | lingers and ticks damage | radius |
+
+`On Spawn` fires once per **entity** the parent creates, not once per cast, so
+Cone fires it three times — once per bolt, each from that bolt's own position
+and heading. Measured: Cone + Rolling Stone spawns 3 boulders where Projectile
+spawns 1. Orbiting field triggers are unaffected, because they refresh rather
+than restack: Cone + Solid Defense still yields 2 stones, not 6.
+
+The cost is that on-spawn nests multiply. The worst case the editor allows — a
+three-deep nest on Cone, in a 250-enemy crowd — peaks at **189 live entities and
+3.32 ms/frame**, about 5x headroom, against 0.39 ms for a bare Cone. The entity
+pool does not grow.
+
+**Field is no longer a playable Focus**, but it is still an entity *kind*:
+Solid Defense, Flash of Swords, Perfect Storm and the fire trail all spawn field
+entities and compile from `FOCUSES.field`. That is why the entry survives in the
+table while being absent from `FOCUS_IDS` — the table doubles as the base-stat
+block for every kind, not just the ones a player may choose.
+
+Cone is the middle ground it replaced. At runtime it *is* a Projectile — same
+entity, same update path — differing only in the flags it is born with:
+`split: 3` and a wide `cone`. Range does its balancing for free: at point blank
+all three bolts strike one body, and by full range they have fanned far enough
+that only the centre one does.
 
 Runes hang off it, in two kinds. **Modifiers** change the node they hang under.
 **Triggers** are complete effects with a condition — they cast something of
@@ -105,16 +128,27 @@ split is measured rather than assumed — `tools/focus-bench.js` plants an
 unkillable target set and times each Focus bare and carrying an identical
 `On Hit` trigger.
 
-Damage per second, same trigger on each:
+Damage per second, bare, measured on the hardened rune-bench harness:
 
-| Focus | vs a crowd of 130 | vs one target |
-|---|---|---|
-| **Burst** | **1652** | 36 |
-| **Field** | 600 | 49 |
-| **Projectile** | 548 | **95** |
+| Focus | crowd damage | kills/sec | single target |
+|---|---|---|---|
+| **Projectile** | 192 | 2.2 | **48** |
+| **Cone** | 312 | **3.2** | 35 |
+| **Burst** | **403** | 0.4 | 10 |
 
-Burst owns crowds (3× the others), Projectile owns single targets (2.6× Burst).
-Field sits between, trading peak for uptime.
+Each owns a lane: Projectile the single target (bosses), Burst raw crowd
+damage, Cone the kill throughput between them. Both the crowd and
+single-target columns are monotonic with Cone in the middle, which is what
+"middle ground" has to mean to be worth picking.
+
+Cone took two passes to get there. At 15 damage a bolt it measured **the same
+crowd damage as Projectile, a worse kill rate (0.8/s against 2.2) and better
+single-target damage** — a worse Projectile that was better at bosses, which is
+backwards on both counts. Splitting a similar total across more, weaker bolts
+spread damage so thinly that nothing died: a zombie needed four hits instead of
+three. Per-bolt damage is now kept near Projectile's, and the fan was widened
+from 0.38 to 0.52 because at the narrow angle all three bolts still converged on
+one body at normal range.
 
 Getting there took a structural fix, not a tuning pass. Projectile originally
 measured **15 dps against Burst's 738 — a 50× gap**, because a cast with no
@@ -126,8 +160,7 @@ have needed an 0.018s cooldown to compensate.
 The fix was three-sided: **base pierce 3** on the Projectile focus (the
 structural half — it multiplies damage and trigger firings together), a
 **cooldown of 0.42s** down from 0.90 (cadence is worth double here, since every
-cast is also an `On Cast` trigger), and **Burst slowed to 3.2s** with Field's
-tick eased to 0.6s.
+cast is also an `On Spawn` trigger), and **Burst slowed to 3.2s**.
 
 > Harness note: the bench asserts `simAdvanced` matches its window. An earlier
 > version did not, and a level-up card screen silently paused the sim
@@ -270,11 +303,14 @@ await __bossBench()                    // each boss at its own arrival time
 await __bossBench({ atSeconds: 150 })  // all on one clock, isolating base health
 ```
 
-| Boss (at arrival) | Health | Projectile | Field | Burst |
+| Boss (at arrival) | Health | Projectile | Field* | Burst |
 |---|---|---|---|---|
 | Iron Warden (2:30) | 2,777 | 49 dps → 56s | 13 → 209s | 7 → 386s |
 | Devourer (5:00) | 5,188 | 50 dps → 104s | 7 → 741s | 6 → 811s |
 | Storm Crown (7:30) | 9,039 | 50 dps → 181s | 12 → 745s | 7 → 1255s |
+
+\* Measured when Field was still playable; Cone has since replaced it and these
+rows have not been re-run.
 
 Read these as a **floor, not a prediction** — they are upgrade-free, and a real
 player arrives with eight or ten levels of runes placed. Health is tuned so a
@@ -402,13 +438,60 @@ trigger dealing 70% loses 14% of that, which is about a tenth of the parent
 spell's damage worth of output. If the intent is for the trade to be felt
 rather than noticed, the curve in `COST_DMG` is the dial.
 
-### Two bugs found while rebalancing
+### Seven bugs found while rebalancing
 
 **Homing steered at targets it had already hit.** Hit dedup means a projectile
 can never damage the same enemy twice, but `nearestTo` had no filter, so a
 homing shot locked onto the body it had just passed through and circled a target
 it could not hurt. Both homing runes measured at nothing because of it. Fixing
 the filter took Fulgor's Sparks from +14% kill rate to +64%.
+
+**AOE hit dedup overflowed, and On Hit fired repeatedly.** The per-entity hit
+list introduced above was a fixed `Int32Array(128)`, sized for the largest
+pierce in the game. That reasoning only holds for projectiles -- a **Burst has
+no pierce limit**, it touches everything inside its radius, which in a late-run
+crowd is several hundred. Past 128 distinct targets `claim()` let the hit
+through without recording it, so the same body was struck on every frame of the
+expansion and fired its On Hit trigger again each time. Measured at a crowd of
+200: 352 hits instead of 200, with individual enemies hit four times. The cliff
+sat exactly at the array size. The list now grows on demand and lives on the
+pooled entity, so growth happens a handful of times and never again; resetting
+is still `hitCount = 0`. Exact from a crowd of 80 to 300.
+
+**Boss chests discounted the next level.** `grantLevels` raised the level but
+left `xpNeed` at its pre-chest value, where `gainXp` recomputes it. Three levels
+from level five left the next level costing 145 instead of 312 -- more than half
+off, on every boss chest in a run. It self-corrected after one more normal
+level-up, so it was one heavily discounted level per chest.
+
+**Screen shake never settled on any pause screen.** `render()` applies shake on
+every frame, but `updateFx` -- the only thing that decayed it -- runs inside the
+simulation, behind the pause check. A shake landing just before a pause (a boss
+dying is worth 14 on its own) stayed at full strength for as long as the
+level-up, editor or game-over screen was up. Decay now runs from the frame loop
+on real time, which is also more correct: shake is perceived in wall-clock time,
+not simulation steps.
+
+**Making a Field orbit collapsed its size.** An orbiting field takes its radius
+from `baseSize`, which is only ever set by a *trigger* effect (Solid Defense's
+stones, Flash of Swords' blades). A player's own Field has no `baseSize`, so it
+fell through to a hardcoded `30` — socketing Self-Centered cut a radius-100 field
+to 30 and left size runes scaling 30 instead of 100, so Heavy Burden at x1.60
+reached only 48, still less than half the bare field. Reported as "size
+adjustment isn't working". An orbiting field is now sized from the spell's own
+range (`ORBIT_FIELD_SCALE`, 0.45), so investment carries: 45 bare, 72 at x1.60.
+Trigger effects that declare their own size are untouched. Self-Centered's
+description now states the reduction rather than hiding it.
+
+**The field cap silently clipped the fire trail.** `fieldCap` was added to stop
+on-kill vortexes running away, but a trail is a *placed* field too, so it fell
+under the same ceiling: it wanted about forty patches and got six, roughly a
+sixth of its length, and then stopped drawing until they expired. Trails now
+carry their own `cap` and, at that ceiling, **evict their oldest patch instead
+of refusing the new one** — refusing drops the patch nearest the projectile, so
+the trail visibly stops exactly where the player is looking while a stale tail
+lingers behind them. Measured after: the patch behind the projectile is present
+on 99% of frames.
 
 **Short Fuse deleted Field builds.** It cut `range`, which on a Field *is* the
 radius — measured at **−100% damage**, a free rune that was pure downside on a
@@ -424,7 +507,7 @@ damage bonus so the tradeoff is real in both directions.
 | Silent Grudge | power 14 | **78** | growth worked, but base pierce capped a projectile at three hits so the extra reach found no targets |
 | Short Fuse | power 4 (−100% on Field) | **58** | see above |
 | Gust of Wind | power 38 | **65** | the weakest free trigger |
-| Piercing Eyes | power 29 | 17, now free | pierce beyond three is gated by how *wide* the projectile is, not how many it may pass through — a combo piece for size runes, priced accordingly |
+| Piercing Eyes | power 29 | 17, now free | measured at crowd 80, where a projectile finds only ~5 bodies however much it may pierce. At 200+ it finds ~13, so this is a late-game scaling rune the bench under-rates — see below |
 
 Cost and tier were then re-derived from the final numbers, moving 15 more runes.
 
@@ -442,6 +525,13 @@ Cost and tier were then re-derived from the final numbers, moving 15 more runes.
 - **The bench is Projectile-only by default.** Pass `{ focus: 'field' }` before
   trusting any single number; Silent Grudge reads +4% on a Projectile and +203%
   on a Field.
+- **The bench runs at crowd 80, which is minute-2.5 density, and that
+  under-rates anything whose value scales with how many bodies are in reach.**
+  Measured average hits per projectile: bare finds 3.0; pierce 13 finds 5.0 at
+  crowd 80 but **12.8 at crowd 200 and 12.9 at 300**. So pierce is not weak, it
+  is density-gated — at minute 8 it delivers four times the bare projectile,
+  and the harness never sees that. Re-run with `{ crowd: 250 }` before pricing
+  any reach, size or pierce rune.
 
 ## Why PixiJS
 
@@ -510,10 +600,18 @@ allocate nothing.
 **Spatial hashing.** `Grid` buckets everything into 52px cells, rebuilt from
 scratch each frame (cheaper than incremental maintenance when everything moves).
 
-**Hit dedup without allocation.** Each compiled Focus owns a `gate` channel and
-each spawned entity a unique `eid`; an enemy records `hitBy[gate] = eid`. O(1),
-no per-entity hit lists, and two projectiles from the same spell can still both
-land on one enemy while neither hits it twice.
+**Hit dedup without allocation.** Each projectile keeps the ids of the bodies it
+has already passed through in a fixed `Int32Array`, checked before a hit lands.
+The scan is bounded by how far the projectile may pierce and only runs on an
+actual overlap, so it stays allocation-free.
+
+This used to live on the enemy instead — one slot per compiled node holding the
+last entity to touch it — which is O(1) but remembers only ONE entity per node.
+Two projectiles from the same spell overlapping one body overwrote each other's
+slot and re-armed each other. Measured: one cast landed 1 hit correctly, two
+overlapping landed 5, four landed 12. `Return` made it severe by doubling
+projectile lifetime, which guarantees overlap — 920 damage against 260 for the
+bare spell. Now exact from 1 to 10 overlapping casts.
 
 **Culling.** Enemy separation — what makes the horde read as a crowd rather than
 a queue — only runs for enemies on screen.

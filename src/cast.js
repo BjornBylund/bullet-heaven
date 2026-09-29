@@ -12,10 +12,25 @@ import { burst } from './fx.js';
  * One pool serves every effect, discriminated by `kind`, so a trigger can cast
  * anything without the runtime caring what it is.
  *
- * Hit dedup uses a (gate, eid) pair rather than per-entity hit lists: every
- * compiled node owns a `gate` channel, every spawned entity a unique `eid`, and
- * an enemy records `hitBy[gate] = eid`. O(1), no allocation, and two
- * projectiles from the same node can both land while neither hits twice.
+ * ON SPAWN is per entity rather than per cast. A spell that throws three bolts
+ * fires it three times, each from the bolt that caused it, so the condition
+ * scales with Split the way the other conditions already do.
+ *
+ * HIT DEDUP lives on the entity: each projectile keeps the ids of the bodies it
+ * has already passed through, and checks that list before landing a hit.
+ *
+ * It used to live on the enemy, as `hitBy[gate] = eid` -- one slot per compiled
+ * node, holding the last entity from that node to touch it. That is O(1) and
+ * allocation-free, but it only remembers ONE entity per node, so two projectiles
+ * from the same spell overlapping the same body overwrote each other's slot and
+ * re-armed each other. Measured: one cast landed 1 hit on a single target
+ * correctly, two overlapping casts landed 5, and four landed 12. Return made it
+ * severe by doubling projectile lifetime, which guarantees overlap -- 920 damage
+ * against 260 for the bare spell on a close target.
+ *
+ * The list is a fixed Int32Array, so this is still allocation-free; the scan is
+ * bounded by how many bodies a projectile may pierce, and only runs on an actual
+ * overlap rather than on every candidate the grid returns.
  */
 
 
@@ -64,6 +79,12 @@ export function initCasting() {
       dmg: 0, radius: 0, baseRadius: 0, prevRadius: 0,
       range: 0, travelled: 0, age: 0, life: 0,
       hits: 0, distFired: false, returning: false, trailAcc: 0, look: null,
+      // Bodies already hit. Grows on demand (see claim) because a Burst has no
+      // pierce limit -- it touches everything inside its radius, which in a
+      // late-run crowd is several hundred. The array lives on the pooled entity
+      // and is reused, so growth happens a handful of times and then never
+      // again; resetting is just hitCount = 0.
+      hitIds: new Int32Array(32), hitCount: 0,
       tickT: 0, trigFired: 0,
       orbitIndex: 0, orbitCount: 1, spin: 0,
     };
@@ -112,7 +133,6 @@ export function castSpell(c, x, y, inAngle) {
     }
   }
 
-  fireTriggers(null, c, 'cast', x, y, angle);
 }
 
 /** Live entities belonging to one compiled node. */
@@ -158,10 +178,33 @@ function emitField(c, x, y, angle, copies) {
     return;
   }
 
-  const cap = CFG.spell.fieldCap;
+  // A descriptor may raise its own ceiling; the trail is the one that does.
+  const cap = c.cap || CFG.spell.fieldCap;
   let live = liveOf(c);
+
+  // At the ceiling, a TRAIL evicts its oldest patch rather than refusing the
+  // new one. Refusing drops the patch nearest the projectile, so the trail
+  // visibly stops right where the player is looking while a stale tail lingers
+  // behind them -- exactly backwards. Dropped fields keep refusing: one vortex
+  // should not delete another.
+  if (c.evictOldest) {
+    while (live >= cap) {
+      let oldest = null;
+      for (const e of G.spellEntities.active) {
+        if (e.c === c && (oldest === null || e.age > oldest.age)) oldest = e;
+      }
+      if (oldest === null) break;
+      oldest.alive = false;
+      live--;
+    }
+  }
+
   for (let i = 0; i < want && live < cap; i++, live++) spawn(c, x, y, angle, i, want);
 }
+
+// How much of its own radius a Field keeps when it is made to orbit. Several
+// smaller patches that sweep the field, rather than one big stationary one.
+const ORBIT_FIELD_SCALE = 0.45;
 
 function spawn(c, x, y, angle, orbitIndex, orbitCount) {
   const e = G.spellEntities.spawn();
@@ -176,6 +219,7 @@ function spawn(c, x, y, angle, orbitIndex, orbitCount) {
   e.angle = angle;
   e.dmg = st.dmg;
   e.hits = 0;
+  e.hitCount = 0;
   e.trigFired = 0;
   e.distFired = false;
   e.returning = false;
@@ -209,7 +253,15 @@ function spawn(c, x, y, angle, orbitIndex, orbitCount) {
     e.prevRadius = 0;
     e.life = st.expand;
   } else {
-    e.range = f.orbit ? (f.baseSize || 30) * f.size : range * f.size;
+    // An orbiting field is deliberately smaller than the single stationary one
+    // it replaces, but it must still be sized FROM THE SPELL. `baseSize` is only
+    // ever set by a trigger effect (Solid Defense's stones, Flash of Swords'
+    // blades), so a player's own Field reaching this branch had no baseSize and
+    // fell through to a hardcoded 30 -- collapsing a radius-100 field to 30 the
+    // moment Self-Centered was socketed, and leaving size runes scaling 30
+    // instead of 100. Reported as "size adjustment isn't working".
+    e.range = f.orbit ? (f.baseSize || range * ORBIT_FIELD_SCALE) * f.size
+                      : range * f.size;
     e.baseRadius = e.range;
     e.radius = e.range;
     e.life = st.life;
@@ -217,6 +269,13 @@ function spawn(c, x, y, angle, orbitIndex, orbitCount) {
     e.spin = 2.1;
     s.rotation = 0;
   }
+
+  // ON SPAWN fires here, per ENTITY, not once per cast. A Cone throws three
+  // bolts, so it fires three times, each from its own bolt's position and
+  // heading -- which is the whole point of the condition. Fired last, once the
+  // entity is fully built, because the trigger's own effect may spawn more
+  // entities and those must not see a half-initialised parent.
+  fireTriggers(e, c, 'spawn', x, y, angle);
   return e;
 }
 
@@ -275,10 +334,28 @@ function dealDamage(ent, target) {
   return killed;
 }
 
+/** Has this entity already passed through this body? */
+function hasHit(ent, target) {
+  const ids = ent.hitIds;
+  const n = ent.hitCount;
+  const id = target.eid;
+  for (let i = 0; i < n; i++) if (ids[i] === id) return true;
+  return false;
+}
+
 function claim(ent, target) {
-  const g = ent.c.gate;
-  if (target.hitBy[g] === ent.eid) return false;
-  target.hitBy[g] = ent.eid;
+  if (hasHit(ent, target)) return false;
+  if (ent.hitCount === ent.hitIds.length) {
+    // Grow rather than allow an unrecorded hit. A fixed ceiling sized for the
+    // largest pierce was far too small for a Burst: past it, claim() let the
+    // hit through without remembering it, so the same body was struck on every
+    // frame of the expansion and fired On Hit again each time. Measured at a
+    // crowd of 200, a single burst landed 352 hits instead of 200.
+    const bigger = new Int32Array(ent.hitIds.length * 2);
+    bigger.set(ent.hitIds);
+    ent.hitIds = bigger;
+  }
+  ent.hitIds[ent.hitCount++] = target.eid;
   return true;
 }
 
@@ -329,8 +406,7 @@ function updateProjectile(ent, dt, near) {
     // never damage the same enemy twice, so without this filter a homing shot
     // locks onto the body it just passed through and circles a target it
     // cannot hurt -- which is why both homing runes measured at nothing.
-    const g = c.gate;
-    const t = nearestTo(ent.x, ent.y, 420, (e) => e.hitBy[g] === ent.eid);
+    const t = nearestTo(ent.x, ent.y, 420, (e) => hasHit(ent, e));
     if (t) {
       const want = Math.atan2(t.y - ent.y, t.x - ent.x);
       let d = want - ent.angle;
@@ -360,8 +436,9 @@ function updateProjectile(ent, dt, near) {
   // drip anchored patches behind it at a fixed spacing, so trail density does
   // not depend on projectile speed
   if (c.trail) {
+    const gap = c.trail.spacing || 44;
     ent.trailAcc += sp * dt;
-    if (ent.trailAcc >= 44) { ent.trailAcc -= 44; castSpell(c.trail, ent.x, ent.y, 0); }
+    if (ent.trailAcc >= gap) { ent.trailAcc -= gap; castSpell(c.trail, ent.x, ent.y, 0); }
   }
 
   if (f.grow) {
@@ -467,8 +544,9 @@ function updateField(ent, dt, near, p) {
   const s = ent.s;
   s.width = s.height = ent.radius * 2.3;
   s.rotation += ent.look.spin * dt;
-  // each look states its own weight; the soft ones also breathe slightly
-  const base = ent.look.alpha;
+  // Each look states its own weight, but a descriptor may override it -- the
+  // trail lays flame sprites dozens deep and needs far less than flame's own.
+  const base = c.alpha || ent.look.alpha;
   s.alpha = base < 0.6 ? base + Math.sin(G.t * 5 + ent.orbitIndex) * 0.05 : base;
 
   // A tornado drags the swarm inward, which is what makes it feel different

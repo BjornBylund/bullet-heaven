@@ -167,6 +167,20 @@ export function shake(amount) {
   G.shake = Math.min(26, G.shake + amount);
 }
 
+/**
+ * Decays the shake. Driven from the frame loop on REAL time, deliberately not
+ * from updateFx.
+ *
+ * render() applies shake on every frame whether or not the simulation is
+ * stepping, but updateFx only runs inside the sim. So a shake that landed just
+ * before a pause -- a boss dying is worth 14 on its own -- stayed at full
+ * strength for as long as the level-up, editor or game-over screen was up, and
+ * the world jittered behind it the whole time.
+ */
+export function decayShake(dt) {
+  if (G.shake > 0) G.shake = Math.max(0, G.shake - G.shake * 9 * dt - 8 * dt);
+}
+
 export function updateFx(dt) {
   for (const f of G.floaters.active) {
     f.life -= dt;
@@ -213,5 +227,4 @@ export function updateFx(dt) {
   }
   G.effects.sweep((e) => { e.s.visible = false; e.segment = false; });
 
-  if (G.shake > 0) G.shake = Math.max(0, G.shake - G.shake * 9 * dt - 8 * dt);
 }

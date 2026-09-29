@@ -135,6 +135,11 @@ const WAVES = [
   { t: 880, pool: ['hulk', 'golem', 'splitter', 'charger', 'warden'] },
 ];
 
+// Every enemy gets a unique id so a projectile can remember which bodies it
+// has already passed through. Monotonic, never reused, so a recycled pool slot
+// can never be mistaken for the enemy that occupied it before.
+let nextEnemyEid = 1;
+
 let spawnTimer = 0;
 let nextBoss = CFG.spawn.bossEvery;
 let warned = false;
@@ -188,9 +193,7 @@ export function initEnemies() {
       // boss encounter state; inert on everything else
       bossDef: null, bossPhase: 0, pat: null, patName: '',
       patState: 0, patT: 0, patAcc: 0, patCount: 0, patAngle: 0,
-      // Hit dedup: one channel per compiled node, holding the id of the last
-      // entity from that node to touch this enemy.
-      hitBy: new Float32Array(48),
+      eid: 0,            // unique per spawn; see claim() in cast.js
     };
     initEnemyStatus(e);
     return e;
@@ -267,7 +270,7 @@ export function spawnEnemy(typeName, x, y, scaleMul) {
   e.stateT = 0;
   // stagger the first shot so a wave of shooters does not fire in unison
   e.shootCd = def.shootCd ? rand(0.5, def.shootCd) : 0;
-  e.hitBy.fill(0);
+  e.eid = nextEnemyEid++;
   resetEnemyStatus(e);
 
   e.s.tint = def.tint;

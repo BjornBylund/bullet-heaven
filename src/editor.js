@@ -38,7 +38,7 @@ const NODE_H = 58;
 const PAD = 46;
 
 const WHEN_LABEL = {
-  cast: 'Triggered on cast',
+  spawn: 'Triggered on spawn',
   hit: 'Triggered on hit',
   kill: 'Triggered on kill',
   distance: 'Triggered on distance',

@@ -3,7 +3,7 @@ import { G } from './state.js';
 import { CFG } from './config.js';
 import { buildTextures } from './textures.js';
 import { initInput, onPress } from './input.js';
-import { initFx, clearFx, updateFx } from './fx.js';
+import { initFx, clearFx, updateFx, decayShake } from './fx.js';
 import { initPickups, clearPickups, updatePickups } from './pickups.js';
 import {
   initEnemies, resetEnemies, updateEnemies, updateSpawner, targetPopulation,
@@ -259,6 +259,10 @@ function maybeLevelUp() {
 function tick(ticker) {
   const dtReal = Math.min(ticker.deltaMS / 1000, 0.25);
   const blocked = G.paused || G.over || isEditorOpen();
+
+  // Outside the `blocked` check on purpose: render() shakes the world every
+  // frame regardless, so the decay has to run every frame too.
+  decayShake(dtReal);
 
   if (G.running && !blocked) {
     acc += dtReal;

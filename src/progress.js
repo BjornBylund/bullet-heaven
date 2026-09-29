@@ -27,7 +27,13 @@ export function gainXp(amount) {
  * screen each, and the level itself counts toward automatic stat growth.
  */
 export function grantLevels(n) {
-  G.player.level += n;
+  const p = G.player;
+  p.level += n;
+  // Reprice the next level, exactly as gainXp does. Without this the cost of
+  // the following level stayed at whatever it was before the chest: three
+  // levels from level five left the requirement at 145 instead of 312, a
+  // discount of more than half, on every boss chest in the run.
+  p.xpNeed = xpForLevel(p.level);
   G.pendingLevels += n;
   G.statsDirty = true;
 }
