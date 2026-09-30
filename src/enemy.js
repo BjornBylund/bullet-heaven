@@ -6,6 +6,7 @@ import { burst, damageNumber, shake, shockwave } from './fx.js';
 import { rollDrop } from './pickups.js';
 import { killCredit } from './progress.js';
 import { fireShot, HOSTILE } from './shots.js';
+import { sfx, setTrack } from './audio.js';
 import {
   BOSSES, BOSS_IDS, bossType, bossForIndex,
   initBossState, updateBossBehavior, bossTint,
@@ -334,6 +335,7 @@ export function updateSpawner(dt) {
     warned = true;
     G.bossWarnDef = bossForIndex(G.bossIndex);
     G.bossWarn = CFG.spawn.bossWarn;
+    sfx.bossWarn();
   }
 
   if (G.t >= nextBoss) {
@@ -378,6 +380,7 @@ function killEnemy(e) {
   e.alive = false;
   killCredit(e.boss);
   if (G.boss === e) {
+    sfx.bossDie();
     G.boss = null;
     // the death gets its own beat: a wave that clears the boss's own fire
     // off the screen, so the fight ends on a visible full stop
@@ -508,7 +511,11 @@ export function updateEnemies(dt) {
 
     const dx = p.x - e.x, dy = p.y - e.y;
     const dist2 = dx * dx + dy * dy;
-    if (dist2 > despawn2) { e.alive = false; continue; }
+    if (dist2 > despawn2) {
+      e.alive = false;
+      if (G.boss === e) G.boss = null;    // do not leave a dangling boss
+      continue;
+    }
 
     const dist = Math.sqrt(dist2) || 1;
     const ux = dx / dist, uy = dy / dist;
@@ -576,6 +583,10 @@ export function updateEnemies(dt) {
   }
 
   G.rangedAlive = ranged;
+  // Driven from liveness rather than hooked at each spawn and death site, so a
+  // boss that dies, despawns, or is cleared by a restart all land here. setTrack
+  // returns immediately when the track is already right.
+  setTrack(G.boss && G.boss.alive ? 'boss' : 'main');
   G.enemies.sweep((e) => {
     e.s.visible = false;
     e.hpBg.visible = false;

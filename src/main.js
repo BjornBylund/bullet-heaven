@@ -17,12 +17,13 @@ import {
 import { walkNodes } from './spell.js';
 import { initPlayer, resetPlayer, updatePlayer, recomputeStats } from './player.js';
 import { resetOffers } from './upgrades.js';
+import { initAudio, startMusic, sfx } from './audio.js';
 import {
   initEditor, openEditor, closeEditor, isEditorOpen, refreshNag,
 } from './editor.js';
 import {
   initUI, updateHud, refreshSlots, showStart, showPaused,
-  showLevelUp, showGameOver, hideGameOver, isChoosing,
+  showLevelUp, showGameOver, hideGameOver, isChoosing, toggleMusic,
 } from './ui.js';
 
 /**
@@ -104,6 +105,7 @@ async function boot() {
 
   onPress((code) => {
     if (!G.running || G.over || isChoosing()) return;
+    if (code === 'KeyM') { toggleMusic(); return; }
     if (code === 'KeyE') {
       isEditorOpen() ? closeEditor() : openEditor();
       refreshNag();
@@ -204,6 +206,10 @@ function startRun(focusId) {
   closeEditor();
   G.paused = false;
   G.running = true;
+
+  // Started here because this runs from the character-select click, and a
+  // browser will not open an AudioContext outside a user gesture.
+  if (initAudio()) startMusic();
 }
 
 /** Back to character select, so a new run can pick a different starting Focus. */
@@ -239,6 +245,7 @@ function step(dt) {
 }
 
 function endRun() {
+  sfx.gameOver();
   G.running = false;
   G.paused = false;
   closeEditor();
@@ -249,6 +256,7 @@ function endRun() {
 function maybeLevelUp() {
   if (G.over || G.pendingLevels <= 0 || isChoosing() || isEditorOpen()) return;
   G.paused = true;
+  sfx.levelUp();
   showLevelUp(() => {
     G.pendingLevels--;
     if (G.pendingLevels > 0) maybeLevelUp();

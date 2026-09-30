@@ -799,15 +799,79 @@ The player is a slowly rotating faceted crystal, deliberately unlike anything in
 the roster. XP gems are cut stones with real facets, and enemy fire is a bright
 core inside a pulsing halo ring — a shape nothing else uses.
 
+## Audio
+
+Synthesised, not loaded. Every texture in this game is drawn into a canvas at
+startup and the sound follows the same rule: no asset files, nothing to license,
+and the static host stays a static host. Swapping a track for a real recording
+means replacing its entry in `TRACKS` with a buffer source and leaving the rest
+alone.
+
+**Two tracks**, both electro: four-on-the-floor, an offbeat open hat, and a
+sixteenth-note saw bass doing most of the work. The chords are held pads —
+with a bassline that busy, anything more from the keys turns to mud.
+
+| | main | boss |
+|---|---|---|
+| tempo | 124 | 142 |
+| progression | i–VI–III–VII in A minor | i–VI–iv–V in D minor |
+| kick | four on the floor | syncopated, so it never settles |
+| lead | none | a repeating figure over the chord |
+
+The boss track is the same machine wound tighter. It is driven from the boss's
+**liveness**, checked once a frame, rather than hooked at each spawn and death
+site — so a boss that dies, despawns off-screen, or is cleared by a restart all
+land in the same place. Switching waits for the next bar, because cutting a
+four-on-the-floor kick mid-bar is instantly audible as a mistake; at 124 BPM
+that is under two seconds.
+
+**Scheduling uses two clocks.** A coarse `setInterval` wakes often enough to
+queue notes a little ahead, and the notes themselves are placed on the
+AudioContext's own sample clock. Driving audio from the game loop would tie the
+tempo to the frame rate and jitter audibly.
+
+**Silence when the window is not in use.** `visibilitychange` alone is not
+enough, and that was a real bug: it fires for tab switches, but alt-tabbing to
+another application leaves the tab *visible*, so the music kept playing out of a
+window nobody was looking at. Window `blur`/`focus` catches that, and `pagehide`
+covers navigating away and mobile backgrounding, where an unload handler is not
+guaranteed to run.
+
+**Eight effects**: cast, hurt, pickup, level-up, chest, boss warning, boss
+death, game over. Every one declares the closest together it may be heard, and
+the frequent ones drift pitch a little per shot so repeats do not comb.
+
+There is deliberately **no sound for a hit, a kill, or a freeze landing**. Those
+are the three most frequent events in the game — a late run lands hundreds of
+hits a second — and even gated they amounted to a constant tick under everything
+that told the player nothing the damage numbers and the freeze burst had not
+already shown. Removing them was a taste decision, not a performance one: node
+creation barely moved (23 oscillators and 11 buffer sources a second, against 19
+and 12 before), because the gating had already bounded them and the music is
+what dominates.
+
+Frame cost is 0.40 ms against 0.39 ms with no audio at all — the synthesis runs
+off the main thread, and node creation is what the gating bounds.
+
+Volume and a music toggle live top-right, persisted to `localStorage`; **M**
+mutes. Audio starts on the character-select click, because a browser will not
+open an AudioContext outside a user gesture.
+
+**`?silent=1` opens no audio context at all** — no music, no effects, nothing to
+clean up. Load the game that way when playtesting or capturing footage. Muting
+through `setVolume` would be worse than useless for this, because it persists to
+`localStorage` and would leave the player's own game muted the next time they
+opened it.
+
 ## Not built yet
 
 - Meta-progression: gold is tracked and shown on the results screen, but there is
   no persistent shop between runs.
-- Audio.
 - Gamepad and touch input.
 - `On Expire`, `On Proximity`, `On Interval` trigger conditions.
 - Boss-specific rewards. A boss currently drops the same chest any elite does,
   so beating one is worth no more than surviving one.
 - Elements (statuses are the payload they would carry, so nothing is wasted).
-- Trails and blocking halos — two Memory shapes from the reference that need new
-  entity behaviour rather than new parameters.
+- Blocking halos — the one Memory shape from the reference still needing new
+  entity behaviour rather than new parameters. Trails, its pair, now exist as
+  Destructive Path.

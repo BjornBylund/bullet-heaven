@@ -3,6 +3,7 @@ import { G, offscreen } from './state.js';
 import { CFG } from './config.js';
 import { Pool, TAU, rand } from './util.js';
 import { damageEnemy } from './enemy.js';
+import { sfx } from './audio.js';
 import { applyStatus, damageTakenMul, BURN, CHILL } from './status.js';
 import { burst } from './fx.js';
 
@@ -100,6 +101,7 @@ export function clearCasting() {
 // ---------------------------------------------------------------------------
 
 export function castSpell(c, x, y, inAngle) {
+  if (c.depth === 1) sfx.cast();      // the player's own spell only, not every trigger
   const f = c.flags;
   const copies = Math.max(1, f.split);
 

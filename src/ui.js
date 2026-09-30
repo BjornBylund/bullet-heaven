@@ -5,6 +5,7 @@ import { FOCUSES, FOCUS_IDS } from './focuses.js';
 import { countNodes } from './spell.js';
 import { rollChoices, applyChoice } from './upgrades.js';
 import { onPress } from './input.js';
+import { getVolume, setVolume, setMusicEnabled, isMusicEnabled } from './audio.js';
 
 /**
  * HUD and menus, as plain DOM over the canvas: text stays crisp at any DPI,
@@ -27,6 +28,7 @@ export function initUI(handlers) {
     levelup: $('levelup'), lvtitle: $('lvtitle'), cards: $('cards'),
     paused: $('paused'), gameover: $('gameover'),
     gotitle: $('gotitle'), results: $('results'),
+    mutebtn: $('mutebtn'), vol: $('vol'),
     bosswrap: $('bosswrap'), bossname: $('bossname'), bossfill: $('bossfill'),
     bosswarn: $('bosswarn'), bosswarnname: $('bosswarnname'),
     bosswarntitle: $('bosswarntitle'),
@@ -49,6 +51,12 @@ export function initUI(handlers) {
 
   $('againbtn').addEventListener('click', handlers.onRestart);
 
+  // Volume persists across runs (audio.js writes it to localStorage), so the
+  // slider is seeded from the stored value rather than the markup default.
+  el.vol.value = String(Math.round(getVolume() * 100));
+  el.vol.addEventListener('input', () => setVolume(el.vol.value / 100));
+  el.mutebtn.addEventListener('click', toggleMusic);
+
   onPress((code) => {
     if (!pendingChoices) return;
     const m = /^Digit([1-9])$/.exec(code);
@@ -59,6 +67,12 @@ export function initUI(handlers) {
 }
 
 const show = (panel, on) => panel.classList.toggle('show', on);
+
+export function toggleMusic() {
+  const on = !isMusicEnabled();
+  setMusicEnabled(on);
+  el.mutebtn.classList.toggle('off', !on);
+}
 
 export function showStart(on) { show(el.start, on); }
 export function showPaused(on) { show(el.paused, on); }

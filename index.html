@@ -73,6 +73,15 @@
     color:#fff; text-shadow:0 0 26px rgba(255,190,90,0.8); margin:2px 0; }
   #bosswarn .wt { font-size:12px; letter-spacing:3px; color:#c9b8c4; }
 
+  /* Low profile on purpose: present when looked for, invisible otherwise. */
+  #audio { position:absolute; top:14px; right:16px; display:flex; align-items:center;
+    gap:8px; pointer-events:auto; opacity:0.35; transition:opacity 0.15s ease; }
+  #audio:hover { opacity:1; }
+  #mutebtn { background:none; border:none; cursor:pointer; padding:0 2px;
+    color:#cfd8ea; font-size:15px; line-height:1; font-family:inherit; }
+  #mutebtn.off { color:#6b7590; text-decoration:line-through; }
+  #vol { width:74px; accent-color:#7fe3ff; cursor:pointer; }
+
   #nag { pointer-events:auto; cursor:pointer; font-size:11px; letter-spacing:1px;
     padding:6px 12px; border-radius:20px; border:1px solid #4d8fff;
     background:#16243d; color:#bcd9ff; animation:pulse 1.4s ease-in-out infinite; display:none; }
@@ -237,6 +246,11 @@
 
   <div id="ui">
     <div id="xpwrap"><div id="xpfill"></div></div>
+    <div id="audio">
+      <button id="mutebtn" title="Mute music (M)">&#9835;</button>
+      <input id="vol" type="range" min="0" max="100" value="70" title="Volume">
+    </div>
+
     <div id="bosswrap">
       <div id="bossname">BOSS</div>
       <div id="bossbar">

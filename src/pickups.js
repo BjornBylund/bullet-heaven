@@ -3,6 +3,7 @@ import { G } from './state.js';
 import { Pool, TAU, rand, randInt } from './util.js';
 import { gainXp, grantLevels, heal, addGold } from './progress.js';
 import { burst, shake, shockwave } from './fx.js';
+import { sfx } from './audio.js';
 
 /** XP gems and the occasional heart / chest / magnet drop. */
 
@@ -136,6 +137,7 @@ export function rollDrop(x, y, xpValue, isBoss) {
 }
 
 function collectGem(g) {
+  sfx.pickup();
   gainXp(g.value);
   g.alive = false;
 }
@@ -145,6 +147,7 @@ function collectDrop(d) {
   if (d.kind === 'heart') {
     heal(p.stats.maxHp * 0.25);
   } else if (d.kind === 'chest') {
+    sfx.chest();
     grantLevels(randInt(1, 3));
     addGold(40);
     shockwave(d.x, d.y, 10, 160, 0.5, 0xffc861);

@@ -4,6 +4,7 @@ import { CFG, xpForLevel } from './config.js';
 import { burst, shake, damageNumber } from './fx.js';
 import { getAxis } from './input.js';
 import { contactDamageMul } from './status.js';
+import { sfx } from './audio.js';
 
 /** The player: movement, derived stats, contact damage, death. */
 
@@ -93,6 +94,7 @@ export function damagePlayer(amount) {
   p.hp -= dealt;
   p.invuln = CFG.player.invuln;
   p.hurtFlash = 0.18;
+  sfx.hurt();
   // Amber, not red. These particles spray outward from the player and at a
   // glance looked exactly like small incoming shots -- the one reading the
   // colour rule exists to prevent.
