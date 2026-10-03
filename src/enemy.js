@@ -98,7 +98,19 @@ export const TYPES = {
   charger: {
     hp: 34, speed: 78, r: 13, dmg: 16, xp: 3,
     tint: 0xff9a3c, shape: 'horn', behavior: 'charger',
-    chargeRange: 280, chargeSpeed: 430, chargeTime: 0.55, windup: 0.5, recover: 0.9,
+    // Nerfed from windup 0.5 / chargeSpeed 430. The tell is the entire reason
+    // this enemy is fair, and half a second is not long on a screen with two
+    // hundred other things moving -- it reads as "hit by something orange"
+    // rather than "stood in the wrong place". A longer wind-up gives 146px of
+    // repositioning instead of 98px.
+    //
+    // The slower dash is also a range cut, which is the cheaper way to make one:
+    // reach is speed x time, so 350 shortens the lunge from 237px to 193px
+    // without touching chargeRange. It now falls well short of its own 280px
+    // trigger distance, so committing from max range whiffs unless the player
+    // closes during the wind-up. Still 1.8x player speed, which is what keeps
+    // it a dash rather than a jog.
+    chargeRange: 280, chargeSpeed: 350, chargeTime: 0.55, windup: 0.75, recover: 0.9,
   },
 
   // --- heavies --------------------------------------------------------------

@@ -199,6 +199,19 @@ because a roster that only varies numbers reads as one enemy wearing hats.
 Fourteen types, from `swarmling` (7px, 5hp, very fast, arrives in crowds) to
 `hulk` (42px, 640hp, barely moves).
 
+The **charger** is the one whose numbers are a balance statement rather than a
+stat line, because its wind-up is the only reason it is fair. It dashes at
+**1.8x player speed** after a **0.75s** tell, which is 146px of repositioning
+the player is given before the direction locks in. Both were nerfed from 2.2x
+and 0.5s: half a second is not long on a screen with two hundred other things
+moving, and the hit read as "something orange touched me" rather than "I stood
+in the wrong place".
+
+Slowing the dash is also the cheap way to cut its reach, since reach is speed x
+time — the lunge went from 237px to 193px without touching `chargeRange`. It now
+falls well short of its own 280px trigger distance, so a charge committed from
+maximum range whiffs unless the player closes during the wind-up.
+
 **Health bars** appear only once an enemy has actually been damaged, so chaff
 that dies to one hit never shows one and the screen stays readable. Bar width
 tracks body size and the fill runs green → amber → red.
