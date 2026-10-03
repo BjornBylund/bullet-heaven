@@ -30,6 +30,7 @@ const ALLOW = [
   ['index.html', '#edstats'],         // editor, over budget
   ['index.html', '#edmsg'],           // editor, error text
   ['src/ui.js', 'gotitle'],           // sets the results title colour
+  ['index.html', '#clearscores'],     // destructive button, results panel only
 ];
 
 function hueSat(hex) {

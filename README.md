@@ -296,6 +296,76 @@ now by `npm run test:spawn`, which asserts a boss still arrives with the field
 at the cap, that the exemption does not leak to the swarm, and that a
 forty-minute run skips none of its sixteen bosses.
 
+### The ending
+
+Killing the third boss summons **THE RUIN**, and that is how every run ends.
+There is no timer and no win: the twenty minute cap is gone, because it was
+never an ending -- it was a timeout, and a game whose conclusion is "the clock
+ran out" has no final beat. The only question a run answers is how long you
+lasted, which is exactly what the score table ranks.
+
+**It cannot be killed.** It takes no damage at all -- no flash, no damage
+number, no health bar. That silence is the point: a number that appears and
+changes nothing invites the player to keep trying, and the answer to "how much
+more" is never. It is not a fight to be won, it is how the run ends.
+
+It still moves like a boss -- the same windup-execute-recover loop and the same
+readable tells -- because an ending you cannot read is just a wall. What it
+takes away is the option to beat it.
+
+Being invulnerable breaks two things that had to be rebuilt. **Phases run on
+rage rather than health**, since it never loses any: the same four pattern
+pools, reached by surviving rather than by damage. And **the health bar is
+hidden for it**, because a full bar on an invulnerable boss reads as a boss you
+are failing to hurt, which is a worse lie than no bar at all.
+
+Measured against a level-30 player (303 hp) with the boss made invulnerable, so
+the numbers describe the boss rather than a build:
+
+| | standing still | running away |
+|---|---|---|
+| Storm Crown | 11.9s | never |
+| **THE RUIN** | **6.8s** | **39s** |
+
+"Never" is the interesting column, and it is what `rage` exists for. Rage builds
+over 75 seconds and raises contact damage, shot damage and **speed**, ending at
+1.35x the player's own. A boss that cannot out-walk the player can be kited
+forever however hard it hits, so without that the ending does not end.
+
+Rage shortens RECOVER hard (to 30%) and the WINDUP barely at all (to 80%).
+That split is deliberate: recover is the player's breathing room, so taking it
+away is what closes the fight in. Windup is the tell, and an unreadable tell is
+not difficulty, it is noise.
+
+**There is no way out.** Rage drives five things at once, and together they
+close every door:
+
+| | at arrival | at full rage |
+|---|---|---|
+| shots on screen | 0 | **300** (the ceiling) |
+| its speed | 76 | **272** -- the player moves at 195 |
+| shot speed | 250 | 350 |
+| contact damage | 210 | 420 |
+| recover between patterns | 100% | 30% |
+
+Projectile counts scale continuously on top of the phase steps, so the gap you
+walk through keeps narrowing until there is not one. The shot ceiling was
+raised from 200 to 300 for this: at the old cap the escalation stopped being
+visible around half rage, because the extra shots were dropped on the floor and
+the screen looked the same as it had thirty seconds earlier. It costs about
+0.01ms a frame.
+
+Two bugs had to be fixed before any of that worked, both of which made the run
+unfinishable rather than merely easy:
+
+- **A boss outrun past the despawn radius was recycled**, so walking away for
+  twenty seconds deleted the encounter. For the Ruin that was a dead end, since
+  nothing further is scheduled once the ending has begun. Bosses are now exempt
+  from despawn.
+- **A boss that had engaged once never re-approached**, so it stood still firing
+  patterns at a player who had walked away -- measured at 13,000px. It now
+  returns to APPROACH past 620px.
+
 In a genre whose only input is movement, a threat is fair only if you can see it
 coming, and interesting only if reacting costs you position. The windup is what
 turns "you took damage" into "you were standing in the wrong place". APPROACH
@@ -709,6 +779,22 @@ BH.setSpell(0, tree)  // inject a spell tree wholesale
 BH.counts()           // live entity counts per pool
 ```
 
+Looking at the ending without playing seven minutes to reach it:
+
+```js
+BH.god()              // invulnerable -- toggle; see the note below
+BH.ruin()             // summon THE RUIN now, wherever the run is
+BH.rage(1)            // jump the escalation ramp: 0 is arrival, 1 is the top
+BH.rage(0.5)          // ...or anywhere in between
+```
+
+**`BH.god()` first.** The Ruin kills a level-30 player in under seven seconds,
+which is not long enough to watch anything, and the whole ramp takes 75 seconds
+to climb on its own. `BH.rage()` writes the rage CLOCK and applies every
+derived stat immediately, so the boss is at that point of the fight on the
+frame you call it rather than the next one -- which also means it reads
+correctly in a paused game.
+
 And for balance work, load `tools/focus-bench.js` in the page and run:
 
 ```js
@@ -805,12 +891,27 @@ Sprite sizes derive from the hitbox (`r * 2.15`) rather than a per-type scale
 factor, so art can be redrawn at any resolution without the sprite and the thing
 you actually collide with drifting apart.
 
-**Batching still holds**, and it is worth watching. Pixi's
-`maxBatchableTextures` is 16, and each render layer batches independently.
-Worst case per layer: **13** creature textures in `enemies`, **12** spell looks
-in `proj`. Both fit, but neither has much room — four more silhouettes, or four
-more spell looks, would split that layer into two draw calls. The fix at that
-point is packing each set into one atlas rather than N separate textures.
+**A boss is kept at the top of its layer**, re-added each time the layer grows.
+Draw order inside a layer is pool-creation order, which has nothing to do with
+what is alive: measured mid-fight, the Ruin sat at child index 686 of 900 with
+**60 of the 61 live enemies on screen drawn over it**. It was rendering
+correctly the whole time and was simply underneath, which is indistinguishable
+from invisible — and far worse for the one boss that has no health bar to find
+it by. The guard checks the last child first, so the splice only runs when the
+pool has actually grown.
+
+**Batching still holds, and the enemy layer is now full.** Pixi's
+`maxBatchableTextures` is 16, and each render layer batches independently. The
+`enemies` layer carries **exactly 16** creature textures since THE RUIN got its
+skull; `proj` carries 12 spell looks.
+
+Sixteen is the limit rather than a comfortable number, so it was measured
+rather than assumed: with all sixteen on screen at once and 440 enemies on the
+field, the render averaged **0.1ms**. It fits.
+
+There is no room left. The next creature silhouette splits that layer into two
+draw calls, and the fix at that point is packing the set into one atlas rather
+than N separate textures.
 
 ### Spell effects
 
@@ -853,16 +954,41 @@ and the static host stays a static host. Swapping a track for a real recording
 means replacing its entry in `TRACKS` with a buffer source and leaving the rest
 alone.
 
-**Two tracks**, both electro: four-on-the-floor, an offbeat open hat, and a
+**Three tracks.** The first two are electro: four-on-the-floor, an offbeat open hat, and a
 sixteenth-note saw bass doing most of the work. The chords are held pads —
 with a bassline that busy, anything more from the keys turns to mud.
 
-| | main | boss |
-|---|---|---|
-| tempo | 124 | 142 |
-| progression | i–VI–III–VII in A minor | i–VI–iv–V in D minor |
-| kick | four on the floor | syncopated, so it never settles |
-| lead | none | a repeating figure over the chord |
+| | main | boss | **ruin** |
+|---|---|---|---|
+| tempo | 124 | 142 | **164** |
+| progression | i–VI–III–VII in A minor | i–VI–iv–V in D minor | **i–♭VI–♭VII–i in C minor** |
+| kick | four on the floor | syncopated, so it never settles | **four on the floor, an octave down** |
+| lead | none | a repeating figure over the chord | **a rising figure doubled in fifths** |
+
+**THE RUIN's theme is the fastest thing in the game.** The end is near and the
+music should say so — four on the floor at 164 is not a groove, it is a
+countdown.
+
+The dread is carried by what sits under the speed rather than by slowing down:
+a sub pedal held across every bar, felt more than heard, and a struck bell on
+beat one, 1.5 seconds apart, counting the player out. The kick sits an octave
+below the other two tracks.
+
+The progression is the other half of it. i–♭VI–♭VII–i climbs for three chords
+and lands back exactly where it started, so it sounds like it is building to
+something and resolves to nothing, for as long as the player is still alive.
+The lead rises a minor third, a fifth, an octave — and never gets the note
+above, however fast it runs at it.
+
+Two things had to be retuned for the tempo, and both were audible mistakes
+before they were fixed: the deep kick's decay ran straight into the next one at
+0.37s spacing and turned the low end into a continuous rumble with no pulse
+left, and the bell's tail overlapped the following strike until the count read
+as a drone. Both now clear before the next hit.
+
+Adding the track needed five opt-ins on the step player (`heavy`, `hats`,
+`drone`, `toll`, `leadStyle`), all defaulting to the existing behaviour so the
+other two render unchanged.
 
 The boss track is the same machine wound tighter. It is driven from the boss's
 **liveness**, checked once a frame, rather than hooked at each spawn and death
@@ -909,10 +1035,38 @@ through `setVolume` would be worse than useless for this, because it persists to
 `localStorage` and would leave the player's own game muted the next time they
 opened it.
 
+## High scores
+
+Ten best runs, in `localStorage` under `bh.scores`. The game is static files on
+GitHub Pages with no backend, so the table is **per browser** and editable by
+anyone who opens devtools. It is a record of what this machine has managed, not
+a leaderboard, and the code is written as though a player will eventually type
+something hostile into it.
+
+**Ranked by time survived, kills as the tiebreak.** There is no winning — THE
+RUIN ends every run and cannot be killed — so how long you lasted is the only
+question a run answers, and the table answers it. Ranking on kills or gold
+instead would reward farming a safe corner over surviving, which is the
+opposite of what the run asks for.
+
+Every read is defensive, because none of this is worth breaking a run over.
+Storage can be absent (private mode), throw on access (blocked storage), or hold
+anything at all. A malformed row is dropped and the good ones kept; an
+unparseable table reads as empty; a full quota is reported rather than thrown,
+and the results panel is drawn from what `recordRun` returned rather than from
+storage, so the screen is still right about the run that just finished even when
+saving failed. Numbers are clamped to possible values — an edited `seconds` of
+99999 stores as 1200 — and `focus`, the only non-numeric field, is truncated and
+HTML-escaped before it reaches `innerHTML`.
+
+`npm run test:scores` covers all of that, mostly by feeding the module garbage:
+hand-edited tables, a storage that throws on every access, a quota that refuses
+writes, and a run claiming 1e30 kills.
+
 ## Not built yet
 
-- Meta-progression: gold is tracked and shown on the results screen, but there is
-  no persistent shop between runs.
+- Meta-progression: gold is tracked, shown on the results screen and recorded in
+  the high score table, but there is no persistent shop between runs.
 - Gamepad and touch input.
 - `On Expire`, `On Proximity`, `On Interval` trigger conditions.
 - Boss-specific rewards. A boss currently drops the same chest any elite does,

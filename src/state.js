@@ -16,7 +16,6 @@ export const G = {
   running: false,
   paused: false,
   over: false,
-  won: false,
 
   kills: 0,
   gold: 0,
@@ -30,6 +29,8 @@ export const G = {
   rangedAlive: 0,     // live ranged enemies, recounted each frame
 
   boss: null,         // the live boss entity, or null
+  finalBoss: false,   // the run's last fight has begun; no more are scheduled
+  godMode: false,     // dev only, via BH.god(): the player takes no damage
   bossIndex: 0,       // bosses summoned so far; picks who comes next
   bossWarn: 0,        // seconds left on the arrival banner
   bossWarnDef: null,  // which boss the banner is announcing

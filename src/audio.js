@@ -88,6 +88,48 @@ const TRACKS = {
     // a repeating figure over the chord, so the fight has a melody to track
     lead: [0, 7, 12, 7, 15, 12, 7, 0],
   },
+
+  // THE RUIN. Not the boss theme wound tighter -- the opposite of it.
+  //
+  // The other two tracks escalate by speeding up, which is the obvious move and
+  // the wrong one here. Dread is weight and space, not tempo: at 72bpm every
+  // hit has room to decay, and the silence between them is doing as much work
+  // as the notes. A fast track would say "hurry"; this one says "it does not
+  // matter how fast you are".
+  //
+  // The progression is the whole idea. i - bVI - bVII - i in C minor, which
+  // climbs for three chords and then lands back exactly where it started. It
+  // sounds like it is building to something and it resolves to nothing, over
+  // and over, for as long as the player is still alive.
+  ruin: {
+    bpm: 164,                 // the fastest thing in the game, by a margin
+    swing: 0,
+    lowpass: 4200,            // darker than the boss theme, but not muffled
+    noiseFloor: 0.009,
+    chords: [
+      { keys: [60, 63, 67], bass: 36 },   // Cm
+      { keys: [56, 60, 63], bass: 32 },   // Ab
+      { keys: [58, 62, 65], bass: 34 },   // Bb
+      { keys: [60, 63, 67], bass: 36 },   // Cm -- back to the start
+    ],
+    heavy: true,              // the kick still sits an octave below the others
+    drone: true,              // sub pedal under the panic
+    // Four on the floor at 164 is not a groove, it is a countdown.
+    kick: (s) => s % 4 === 0,
+    clap: (s) => s % 8 === 4,                       // hard backbeat
+    openHat: (s) => s % 4 === 2,
+    toll: (s) => s % 16 === 0,                      // a bell every bar, 1.5s apart
+    // Driving sixteenths on the root with the octave pushing between them, and
+    // the fifth leaning into the back half of the bar.
+    bassPattern: [0, null, 12, 0, 0, 12, null, 0, 0, null, 12, 0, 7, 12, 0, 12],
+    // Rises a minor third, a fifth, an octave -- and stops. It never gets the
+    // note above, however fast it runs at it.
+    lead: [0, 3, 7, 12, 10, 7, 12, 15],
+    leadStyle: {
+      type: 'sawtooth', gain: 0.075, filter: 2600, attack: 0.012,
+      octave: 0, hold: 1.1, every: 2, detune: 6, fifth: true,
+    },
+  },
 };
 
 const trk = () => TRACKS[A.track];
@@ -165,6 +207,10 @@ function makeNoise() {
 
 export function isReady() { return !!A.ctx; }
 export function currentTrack() { return A.track; }
+/** The track queued for the next bar boundary, or null. Exposed for tests. */
+export function pendingTrack() { return A.pending; }
+/** Track names, so a test can assert the roster rather than hard-code it. */
+export function trackNames() { return Object.keys(TRACKS); }
 
 // ---------------------------------------------------------------------------
 // volume
@@ -277,7 +323,14 @@ export function stopMusic() {
  * At 124 BPM the wait is under two seconds.
  */
 export function setTrack(name) {
-  if (!TRACKS[name] || name === A.track || A.pending === name) return;
+  if (!TRACKS[name]) return;
+  // Asking for the track already playing CANCELS a queued change rather than
+  // doing nothing. A change only lands on a bar boundary, so a boss that dies
+  // inside the bar it spawned in used to leave its own theme queued behind it:
+  // the fight was over, and the boss music started afterwards and stayed until
+  // something else triggered a switch.
+  if (name === A.track) { A.pending = null; return; }
+  if (A.pending === name) return;
   A.pending = name;
 }
 
@@ -326,8 +379,20 @@ function playStep(step, time) {
   const M = A.musicBus;
 
   if (k.kick(step)) {
-    tone(t, 150, 0.20, { type: 'sine', gain: 0.62, glide: 46, dest: M, attack: 0.004 });
-    noiseHit(t, 0.02, { gain: 0.09, hp: 1000, lp: 7000, dest: M });   // beater click
+    // `heavy` drops it an octave and lets it ring: a war drum rather than a
+    // dance kick. The click is dropped with it -- the attack transient is what
+    // makes a kick sound like a machine.
+    if (k.heavy) {
+      // Short enough not to smear. At 164bpm a four-on-the-floor kick lands
+      // every 0.37s, and the long decay this started with ran straight into
+      // the next one -- the low end turned to a continuous rumble with no
+      // pulse left in it.
+      tone(t, 74, 0.30, { type: 'sine', gain: 0.78, glide: 30, dest: M, attack: 0.005 });
+      noiseHit(t, 0.07, { gain: 0.08, hp: 90, lp: 1100, dest: M });
+    } else {
+      tone(t, 150, 0.20, { type: 'sine', gain: 0.62, glide: 46, dest: M, attack: 0.004 });
+      noiseHit(t, 0.02, { gain: 0.09, hp: 1000, lp: 7000, dest: M });   // beater click
+    }
   }
   if (k.clap(step)) {
     // three closely spaced bursts read as a clap where one reads as a snare
@@ -335,10 +400,32 @@ function playStep(step, time) {
       noiseHit(t + i * 0.008, 0.11, { gain: 0.13, hp: 1500, lp: 6500, dest: M });
     }
   }
-  if (k.openHat(step)) {
-    noiseHit(t, 0.11, { gain: 0.06, hp: 7000, dest: M });
-  } else if (step % 2 === 0) {
-    noiseHit(t, 0.022, { gain: 0.03, hp: 8000, dest: M });
+  // Hats are what make a groove feel like a groove, which is the last thing
+  // the Ruin's theme wants -- it opts out entirely and keeps the space.
+  if (k.hats !== false) {
+    if (k.openHat(step)) {
+      noiseHit(t, 0.11, { gain: 0.06, hp: 7000, dest: M });
+    } else if (step % 2 === 0) {
+      noiseHit(t, 0.022, { gain: 0.03, hp: 8000, dest: M });
+    }
+  }
+
+  // A sub pedal under the whole bar. Felt more than heard, and the reason the
+  // Ruin's theme sits on the chest rather than in the ears.
+  if (k.drone && beat === 0) {
+    tone(t, midi(chord.bass - 12), d * 17,
+         { type: 'sine', gain: 0.30, filter: 160, dest: M, attack: 0.30 });
+  }
+
+  // A struck bell, two partials and a long tail. This is the clock running
+  // out: slow, unhurried, and it does not care what the player is doing.
+  if (k.toll && k.toll(step)) {
+    // Tail kept just under the bar so each strike clears before the next --
+    // overlapping bells stack into a drone and stop reading as a count.
+    tone(t, midi(chord.bass + 12), 1.35,
+         { type: 'triangle', gain: 0.17, filter: 1100, dest: M, attack: 0.003 });
+    tone(t, midi(chord.bass + 19), 1.05,
+         { type: 'triangle', gain: 0.06, filter: 1500, detune: 7, dest: M, attack: 0.003 });
   }
 
   // Bass: a sixteenth pulse doing most of the movement. 0 = root, 12 = octave.
@@ -358,10 +445,24 @@ function playStep(step, time) {
   }
 
   if (k.lead) {
+    const L = k.leadStyle || {};
+    const every = L.every || 2;
     const n = k.lead[beat % k.lead.length];
-    if (beat % 2 === 0) {
-      tone(t, midi(chord.keys[0] + 12 + n), d * 1.6,
-           { type: 'sawtooth', gain: 0.05, filter: 3000, dest: M });
+    if (beat % every === 0) {
+      tone(t, midi(chord.keys[0] + (L.octave === undefined ? 12 : L.octave) + n),
+           d * (L.hold || 1.6),
+           { type: L.type || 'sawtooth', gain: L.gain || 0.05,
+             filter: L.filter || 3000, attack: L.attack || 0.01,
+             detune: L.detune || 0, dest: M });
+      // A second voice a fifth under, which is what separates "a melody" from
+      // "a horn section". Only the Ruin asks for it.
+      if (L.fifth) {
+        tone(t, midi(chord.keys[0] + (L.octave === undefined ? 12 : L.octave) + n - 5),
+             d * (L.hold || 1.6),
+             { type: L.type || 'sawtooth', gain: (L.gain || 0.05) * 0.55,
+               filter: L.filter || 3000, attack: L.attack || 0.01,
+               detune: -6, dest: M });
+      }
     }
   }
 }

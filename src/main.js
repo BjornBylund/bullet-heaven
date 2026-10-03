@@ -7,7 +7,9 @@ import { initFx, clearFx, updateFx, decayShake } from './fx.js';
 import { initPickups, clearPickups, updatePickups } from './pickups.js';
 import {
   initEnemies, resetEnemies, updateEnemies, updateSpawner, targetPopulation,
+  forceFinalBoss,
 } from './enemy.js';
+import { setBossRage } from './boss.js';
 import { initCasting, clearCasting, updateSpellEntities } from './cast.js';
 import { initShots, clearShots, updateShots } from './shots.js';
 import {
@@ -18,6 +20,7 @@ import { walkNodes } from './spell.js';
 import { initPlayer, resetPlayer, updatePlayer, recomputeStats } from './player.js';
 import { resetOffers } from './upgrades.js';
 import { initAudio, startMusic, sfx } from './audio.js';
+import { recordRun } from './scores.js';
 import {
   initEditor, openEditor, closeEditor, isEditorOpen, refreshNag,
 } from './editor.js';
@@ -153,6 +156,27 @@ async function boot() {
       refreshNag();
       return placed;
     },
+    // --- the ending, for looking at it without playing seven minutes first ---
+    //
+    // `BH.ruin()` summons it wherever the run is. `BH.rage(n)` jumps the
+    // escalation ramp, which otherwise takes 75 seconds to reach the top, and
+    // is the only practical way to see what full rage actually looks like.
+    // `BH.god()` is usually needed alongside both: the Ruin kills a level-30
+    // player in under seven seconds, which is not long enough to watch it.
+    ruin: () => {
+      const b = forceFinalBoss();
+      return b ? 'THE RUIN approaches -- BH.god() first, it is quick' : 'could not spawn';
+    },
+    rage: (v = 1) => {
+      const b = G.boss;
+      if (!b || !b.bossDef || !b.bossDef.final) return 'no Ruin on the field; BH.ruin() first';
+      return `rage ${setBossRage(b, v).toFixed(2)}`;
+    },
+    god: (on = !G.godMode) => {
+      G.godMode = on;
+      return on ? 'invulnerable' : 'mortal';
+    },
+
     // how full the field should be right now, for density tuning
     target: () => targetPopulation(G.t / 60),
     counts: () => ({
@@ -191,7 +215,6 @@ function startRun(focusId) {
   G.gold = 0;
   G.pendingLevels = 0;
   G.over = false;
-  G.won = false;
   G.cam.x = 0;
   G.cam.y = 0;
   acc = 0;
@@ -238,10 +261,6 @@ function step(dt) {
   updatePickups(dt);
   updateFx(dt);
 
-  if (G.t >= CFG.runSeconds) {
-    G.won = true;
-    G.over = true;
-  }
 }
 
 function endRun() {
@@ -249,7 +268,16 @@ function endRun() {
   G.running = false;
   G.paused = false;
   closeEditor();
-  showGameOver(G.won);
+  // Filed here because this is the one place a run ends, and it runs exactly
+  // once: it clears G.running, which is what gated the call.
+  const result = recordRun({
+    seconds: G.t,
+    level: G.player.level,
+    kills: G.kills,
+    gold: G.gold,
+    focus: G.player.book.spells[0] ? G.player.book.spells[0].spell.focus : '',
+  });
+  showGameOver(result);
 }
 
 /** One card screen per pending level, so a chest can grant several. */

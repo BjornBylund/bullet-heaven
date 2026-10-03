@@ -65,6 +65,18 @@ function creature(draw, opts) {
   g.stroke();
 
   if (o.eyes) drawEyes(g, r, o.eyes);
+  // A nasal cavity, drawn as a dark wedge in the same ink as the sockets. Two
+  // holes and a nose is the whole of what makes a shape read as a skull rather
+  // than a mask; without it the silhouette is just a toothed lump.
+  if (o.nose) {
+    g.beginPath();
+    g.moveTo(0, r * (o.nose.y || 0.02));
+    g.lineTo(-r * (o.nose.w || 0.12), r * (o.nose.h || 0.26));
+    g.lineTo(r * (o.nose.w || 0.12), r * (o.nose.h || 0.26));
+    g.closePath();
+    g.fillStyle = 'rgba(22,22,26,0.88)';
+    g.fill();
+  }
   return c;
 }
 
@@ -82,7 +94,10 @@ function drawEyes(g, r, e) {
     g.arc(side * r * x, r * y, r * rad, 0, TAU);
     g.fillStyle = e.glow ? 'rgba(255,255,255,0.95)' : 'rgba(22,22,26,0.88)';
     g.fill();
-    if (!e.glow) {
+    // `flat` drops the glint. On a skull it reads as a pupil, which turns an
+    // empty socket into an eye looking back -- the one thing a skull must not
+    // have.
+    if (!e.glow && !e.flat) {
       g.beginPath();
       g.arc(side * r * x - r * 0.035, r * y - r * 0.04, r * rad * 0.34, 0, TAU);
       g.fillStyle = 'rgba(255,255,255,0.55)';
@@ -289,6 +304,34 @@ const mawShape = (g, r) => {
   pts.forEach(([x, y], i) => (i ? g.lineTo(x * r, y * r) : g.moveTo(x * r, y * r)));
 };
 
+/**
+ * A skull. Boss only -- THE RUIN.
+ *
+ * Built as a cranium that is wide at the temples and pinched at the cheeks,
+ * finished with a square-wave row of teeth. The teeth are the tell: a smooth
+ * bottom edge reads as an egg at a glance, and at the size this is drawn the
+ * player sees the silhouette for a fraction of a second before it starts
+ * killing them.
+ */
+const skullShape = (g, r) => {
+  g.moveTo(-r * 0.66, r * 0.10);
+  g.quadraticCurveTo(-r * 1.00, -r * 0.46, -r * 0.44, -r * 0.92);
+  g.quadraticCurveTo(0, -r * 1.14, r * 0.44, -r * 0.92);
+  g.quadraticCurveTo(r * 1.00, -r * 0.46, r * 0.66, r * 0.10);
+  g.lineTo(r * 0.46, r * 0.34);
+
+  const n = 5;
+  const step = (r * 0.92) / n;
+  const top = r * 0.34, bot = r * 0.90;
+  for (let i = 0; i < n; i++) {
+    const x = r * 0.46 - i * step;
+    g.lineTo(x, bot);
+    g.lineTo(x - step * 0.52, bot);
+    g.lineTo(x - step * 0.52, top);
+    g.lineTo(x - step, top);
+  }
+};
+
 /** Spiked crown. Boss only. */
 const crownShape = (g, r) => {
   const spikes = 8;
@@ -322,6 +365,14 @@ function buildCreatures() {
     // pupils in one spot and the thing comes out cyclopean
     warlord: tex(creature(warlordShape, { eyes: { x: 0.26, y: -0.34, rad: 0.13 }, line: 5 })),
     maw:     tex(creature(mawShape, { eyes: { x: -0.34, y: -0.40, rad: 0.14, glow: true }, line: 5 })),
+    // Sixteenth texture on this layer, which is exactly Pixi's per-batch
+    // sampler limit -- see the note above. Measured after adding it: still one
+    // draw call for the enemy layer.
+    skull:   tex(creature(skullShape, {
+      eyes: { x: 0.34, y: -0.30, rad: 0.21, flat: true },
+      nose: { y: 0.00, w: 0.11, h: 0.26 },
+      line: 5,
+    })),
   };
 }
 

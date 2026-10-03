@@ -126,6 +126,26 @@
   #results .v { font-weight:700; }
   #gameover h1 { color:#ff7a6b; text-shadow:0 0 30px #ff7a6b44; }
 
+  /* ---- high scores ---- */
+  #scorebanner { font-size:12px; letter-spacing:2px; color:#ffd36e; min-height:15px; }
+  #scorebanner.best { color:#6ee7a0; text-shadow:0 0 18px #6ee7a055; }
+  #scores { font-size:12px; width:300px; }
+  #scores .row { display:grid; grid-template-columns:22px 1fr auto auto; gap:0 12px;
+    padding:4px 8px; border-radius:6px; color:#8ea0bb; align-items:baseline; }
+  #scores .row.me { background:#1b2740; color:#dce7f7; }
+  #scores .n { text-align:right; color:#5f6f8c; }
+  #scores .t { font-weight:700; font-variant-numeric:tabular-nums; }
+  #scores .f { text-transform:uppercase; letter-spacing:1px; font-size:10px; color:#6f7f9c; }
+  #scores .k { font-variant-numeric:tabular-nums; }
+  #scores .head { color:#5f6f8c; letter-spacing:1px; font-size:10px;
+    border-bottom:1px solid #223049; padding-bottom:5px; margin-bottom:3px; }
+  #scorewrap { display:flex; flex-direction:column; align-items:center; gap:10px; }
+  #clearscores { background:none; border:none; color:#4a5870; font-size:10px;
+    letter-spacing:1px; cursor:pointer; font-family:inherit; padding:2px; }
+  #clearscores:hover { color:#ff7a6b; }
+  #beststrip { font-size:11px; letter-spacing:1px; color:#6f7f9c; min-height:14px; }
+  #beststrip b { color:#bcd9ff; font-weight:700; }
+
   /* ---- character select ---- */
   #chars { display:flex; gap:18px; flex-wrap:wrap; justify-content:center; }
   .chr { width:230px; background:#0e1421; border:1px solid #223049; border-radius:14px;
@@ -289,6 +309,7 @@
       <h1>BULLET HEAVEN</h1>
       <h2>CHOOSE YOUR FIRST SPELL</h2>
       <div id="chars"></div>
+      <div id="beststrip"></div>
       <div class="hint">
         WASD / ARROWS to move &nbsp;&bull;&nbsp; spells cast themselves<br>
         1-4 or click to take an upgrade &nbsp;&bull;&nbsp; E to open the spell editor<br>
@@ -337,7 +358,12 @@
     <div class="panel" id="gameover">
       <h1 id="gotitle">YOU DIED</h1>
       <div id="results"></div>
+      <div id="scorewrap">
+        <div id="scorebanner"></div>
+        <div id="scores"></div>
+      </div>
       <button class="btn" id="againbtn">RUN IT BACK</button>
+      <button id="clearscores">CLEAR HIGH SCORES</button>
     </div>
   </div>
 

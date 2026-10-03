@@ -13,6 +13,7 @@ import { createWorld } from './world.mjs';
 import { G } from '../src/state.js';
 import { CFG } from '../src/config.js';
 import { updateSpawner, spawnEnemy, targetPopulation, damageEnemy } from '../src/enemy.js';
+import { FINAL_AFTER } from '../src/boss.js';
 
 const STEP = 1 / 60;
 let failures = 0;
@@ -29,6 +30,22 @@ function fill(n) {
 
 function sweep() {
   G.enemies.sweep((e) => { e.s.visible = false; e.hpBg.visible = false; e.hpFill.visible = false; });
+}
+
+/**
+ * Keeps the scheduled director running past the point a real run would stop.
+ *
+ * THE RUIN takes no damage and ends the run, so once it arrives the population
+ * target sits at `bossPopMul` forever and the field never reaches the cap
+ * again -- which would make every cap assertion below pass without measuring
+ * anything. These tests are about the director and the cap; the ending has its
+ * own suite in test/final.mjs.
+ */
+function suppressEnding() {
+  if (!G.finalBoss) return;
+  if (G.boss) { G.boss.alive = false; G.boss = null; }
+  G.finalBoss = false;
+  G.bossIndex = 0;              // let the rotation keep coming
 }
 
 // ---------------------------------------------------------------------------
@@ -61,6 +78,7 @@ console.log('\nthe cap still binds the swarm');
     G.t += STEP;
     updateSpawner(STEP);
     if (G.boss && G.boss.alive) damageEnemy(G.boss, 1e12, {});
+    suppressEnding();
     sweep();
   }
   const nonBoss = G.enemies.active.filter((e) => e.alive && !e.boss).length;
@@ -72,21 +90,23 @@ console.log('\nthe cap still binds the swarm');
 }
 
 // ---------------------------------------------------------------------------
-console.log('\nno boss is skipped over a long run');
+console.log('\nno boss is skipped when the field is at the cap');
 
 {
   createWorld({ crowd: 0, atSeconds: 0 });
   G.t = 0;
-  const skipped = [];
-  let lastIndex = 0, aliveFor = 0;
+  let aliveFor = 0, current = null;
+  const arrivals = [];
 
   for (let i = 0; i < 60 * 60 * 40; i++) {        // 40 minutes
     G.t += STEP;
     updateSpawner(STEP);
-    if (G.bossIndex > lastIndex) {
-      lastIndex = G.bossIndex;
+    // Counted by ARRIVAL rather than by reading bossIndex, because
+    // suppressEnding resets that counter to keep the rotation coming.
+    if (G.boss && G.boss !== current) {
+      current = G.boss;
+      arrivals.push(G.t);
       aliveFor = 0;
-      if (!G.boss || !G.boss.alive) skipped.push((G.t / 60).toFixed(1));
     }
     // A player who kills each boss in twenty seconds and nothing else, which is
     // the worst case for population: the target runs at full between fights.
@@ -94,14 +114,27 @@ console.log('\nno boss is skipped over a long run');
       aliveFor += STEP;
       if (aliveFor > 20) damageEnemy(G.boss, 1e12, {});
     }
+    suppressEnding();
     sweep();
   }
 
   check('the run reached the cap, so this was a real test',
     G.enemies.count >= CFG.spawn.maxEnemies, `${G.enemies.count} alive`);
-  check('every scheduled boss spawned', skipped.length === 0,
-    skipped.length ? `missing at minutes ${skipped.join(', ')}` : `${lastIndex} bosses`);
-  check('bosses kept arriving on schedule', lastIndex >= 15, `${lastIndex} in 40 minutes`);
+  // With the ending suppressed the rotation keeps coming, which is what makes
+  // this a long-run test of the cap rather than a six-minute one. That the
+  // schedule stops after FINAL_AFTER in a real run is asserted in final.mjs.
+  check('bosses kept arriving across the whole run', arrivals.length >= 12,
+    `${arrivals.length} in 40 minutes`);
+
+  // The real property: no scheduled slot was ever missed. A swallowed boss
+  // shows up as a gap of two intervals where there should be one.
+  let worstGap = 0;
+  for (let i = 1; i < arrivals.length; i++) {
+    worstGap = Math.max(worstGap, arrivals[i] - arrivals[i - 1]);
+  }
+  check('and never skipped a slot',
+    worstGap < CFG.spawn.bossEvery * 1.5,
+    `worst gap ${Math.round(worstGap)}s, schedule is every ${CFG.spawn.bossEvery}s`);
 }
 
 console.log(failures ? `\n${failures} failing` : '\nall spawn checks pass');

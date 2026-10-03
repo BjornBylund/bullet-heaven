@@ -17,6 +17,7 @@
  *   MATH.RANDOM IS SEEDED. Scatter, cone jitter and crit rolls are all random;
  *   unseeded, every comparison would be noise against noise.
  */
+import * as PIXI from '../src/pixi.js';
 import { G } from '../src/state.js';
 import { CFG } from '../src/config.js';
 import { initFx, clearFx } from '../src/fx.js';
@@ -94,10 +95,13 @@ let booted = false;
 function boot() {
   if (booted) return;
   G.tex = fakeTextures();
+  // Real Container instances, not inert stubs: draw ORDER inside a layer is
+  // something the game depends on (a boss is kept on top of the swarm by
+  // re-adding its sprite), so a layer that forgets its children cannot test it.
   G.layers = new Proxy({}, {
     get(t, k) {
       if (typeof k === 'symbol') return undefined;
-      if (!t[k]) t[k] = { addChild() {}, removeChild() {}, children: [] };
+      if (!t[k]) t[k] = new PIXI.Container();
       return t[k];
     },
   });

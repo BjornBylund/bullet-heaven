@@ -1,5 +1,10 @@
 export const CFG = {
-  runSeconds: 20 * 60,
+  // NOT a win condition and not a time limit -- there is neither. THE RUIN
+  // ends every run, and it is inevitable. This is only a sanity ceiling for
+  // stored high scores, which live in localStorage and can be hand-edited: no
+  // real run gets near it, since the Ruin arrives at 7:30 and finishes inside
+  // a minute.
+  maxRunSeconds: 20 * 60,
 
   player: {
     hp: 100,
@@ -63,7 +68,13 @@ export const CFG = {
     // A boss pattern must never be silently truncated by the ambient shot
     // cap -- half a ring is unreadable and unfair. Boss fire draws from
     // this extra headroom instead.
-    bossShotHeadroom: 130,
+    // Raised from 130 for the final fight. THE RUIN's rage scales every
+    // pattern's projectile count, and at the old ceiling the escalation simply
+    // stopped being visible past about half rage -- the extra shots were
+    // dropped on the floor and the screen looked the same as it had thirty
+    // seconds earlier. The other bosses never approach this; their counts are
+    // lower and their recoveries longer.
+    bossShotHeadroom: 230,
     bossWarn: 3.0,        // seconds of banner before a boss arrives
     // The field thins out hard during a fight. Two reasons, and the second is
     // the load-bearing one: the boss's patterns have to be legible, and the

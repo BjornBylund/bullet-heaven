@@ -5,6 +5,7 @@ import { FOCUSES, FOCUS_IDS } from './focuses.js';
 import { countNodes } from './spell.js';
 import { rollChoices, applyChoice } from './upgrades.js';
 import { onPress } from './input.js';
+import { loadScores, clearScores, MAX_SCORES } from './scores.js';
 import { getVolume, setVolume, setMusicEnabled, isMusicEnabled } from './audio.js';
 
 /**
@@ -29,6 +30,8 @@ export function initUI(handlers) {
     paused: $('paused'), gameover: $('gameover'),
     gotitle: $('gotitle'), results: $('results'),
     mutebtn: $('mutebtn'), vol: $('vol'),
+    scores: $('scores'), scorebanner: $('scorebanner'),
+    clearscores: $('clearscores'), beststrip: $('beststrip'),
     bosswrap: $('bosswrap'), bossname: $('bossname'), bossfill: $('bossfill'),
     bosswarn: $('bosswarn'), bosswarnname: $('bosswarnname'),
     bosswarntitle: $('bosswarntitle'),
@@ -50,6 +53,16 @@ export function initUI(handlers) {
   }
 
   $('againbtn').addEventListener('click', handlers.onRestart);
+
+  // Destructive and unrecoverable, so it asks. The button is deliberately the
+  // quietest thing on the panel -- it exists for the person handing the laptop
+  // to someone else, not for the person who just finished a run.
+  el.clearscores.addEventListener('click', () => {
+    if (!confirm('Delete all high scores on this browser?')) return;
+    clearScores();
+    renderScores([], 0);
+    refreshBest();
+  });
 
   // Volume persists across runs (audio.js writes it to localStorage), so the
   // slider is seeded from the stored value rather than the markup default.
@@ -74,7 +87,52 @@ export function toggleMusic() {
   el.mutebtn.classList.toggle('off', !on);
 }
 
-export function showStart(on) { show(el.start, on); }
+export function showStart(on) {
+  if (on) refreshBest();
+  show(el.start, on);
+}
+
+/** The one line of history the player sees before choosing a spell. */
+function refreshBest() {
+  const best = loadScores()[0];
+  el.beststrip.innerHTML = best
+    ? `BEST <b>${formatTime(best.seconds)}</b>` +
+      `${best.focus ? ` as <b>${esc(best.focus.toUpperCase())}</b>` : ''}` +
+      ` &nbsp;&bull;&nbsp; <b>${best.kills.toLocaleString()}</b> KILLS`
+    : '';
+}
+
+// Scores come back from localStorage, which anyone can edit by hand, so every
+// stored string is escaped before it reaches innerHTML. `focus` is the only one
+// that is not a number, and it is the only one that could carry markup.
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => (
+  { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+));
+
+/**
+ * Draws the table, highlighting the run just played.
+ *
+ * `mine` is a 1-based rank, or 0 when the run did not place -- which is why the
+ * row is found by rank rather than by matching values: two runs can tie on
+ * every number shown, and only one of them is the one that just happened.
+ */
+function renderScores(scores, mine) {
+  if (!scores.length) {
+    el.scores.innerHTML = `<div class="row"><div></div><div>no runs recorded yet</div></div>`;
+    return;
+  }
+  const head = `<div class="row head"><div></div><div>TIME</div><div>KILLS</div><div>LV</div></div>`;
+  el.scores.innerHTML = head + scores.map((s, i) => {
+    const cls = `row${i + 1 === mine ? ' me' : ''}`;
+    return `<div class="${cls}">` +
+      `<div class="n">${i + 1}</div>` +
+      `<div class="t">${formatTime(s.seconds)}` +
+        `${s.focus ? ` <span class="f">${esc(s.focus)}</span>` : ''}</div>` +
+      `<div class="k">${s.kills.toLocaleString()}</div>` +
+      `<div class="k">${s.level}</div>` +
+    `</div>`;
+  }).join('');
+}
 export function showPaused(on) { show(el.paused, on); }
 
 export function updateHud() {
@@ -102,7 +160,9 @@ let shownWarn = null;
  */
 function updateBossHud() {
   const b = G.boss;
-  const live = !!(b && b.alive);
+  // The Ruin gets no health bar. An invulnerable boss with a full bar reads as
+  // a boss you are failing to damage, which is a worse lie than no bar at all.
+  const live = !!(b && b.alive && !(b.bossDef && b.bossDef.final));
   el.bosswrap.classList.toggle('show', live);
   if (live) {
     if (shownBoss !== b) {
@@ -209,14 +269,35 @@ function choose(c) {
   if (cb) cb();
 }
 
-export function showGameOver(won) {
-  el.gotitle.textContent = won ? 'YOU SURVIVED' : 'YOU DIED';
-  el.gotitle.style.color = won ? '#6ee7a0' : '#ff7a6b';
+/**
+ * `result` is what `recordRun` returned for this run, or null when the run was
+ * not filed. The panel is drawn from it rather than from storage, so the table
+ * is still correct when saving failed -- a full quota or a private window
+ * should not make the screen lie about the run that just finished.
+ *
+ * There is no won state. Every run ends in death, because THE RUIN cannot be
+ * killed and cannot be outlasted -- the only question a run answers is how
+ * long, which is what the score table ranks.
+ */
+export function showGameOver(result) {
+  // Two deaths, not two outcomes: reaching the ending and being taken by it is
+  // worth naming differently from dying to the crowd on the way there.
+  el.gotitle.textContent = G.finalBoss ? 'THE RUIN TAKES YOU' : 'YOU DIED';
   el.results.innerHTML =
     `<div class="k">SURVIVED</div><div class="v">${formatTime(G.t)}</div>` +
     `<div class="k">LEVEL</div><div class="v">${G.player.level}</div>` +
     `<div class="k">KILLS</div><div class="v">${G.kills}</div>` +
     `<div class="k">GOLD</div><div class="v">${G.gold}</div>`;
+
+  const r = result || { rank: 0, isBest: false, scores: loadScores(), saved: true };
+  el.scorebanner.className = r.isBest ? 'best' : '';
+  el.scorebanner.textContent =
+    !r.saved ? 'HIGH SCORES UNAVAILABLE IN THIS BROWSER'
+    : r.isBest ? 'NEW PERSONAL BEST'
+    : r.rank ? `#${r.rank} OF YOUR BEST ${MAX_SCORES}`
+    : '';
+  renderScores(r.scores, r.rank);
+
   show(el.gameover, true);
 }
 

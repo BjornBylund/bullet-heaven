@@ -39,7 +39,16 @@ class Node {
     this.label = '';
   }
   addChild(...kids) {
-    for (const k of kids) { k.parent = this; this.children.push(k); }
+    for (const k of kids) {
+      // Re-adding an existing child MOVES it to the end rather than duplicating
+      // it, which is what real Pixi does and is the entire mechanism the game
+      // uses to keep a boss drawn above the swarm. A stub that pushed a second
+      // copy would let that test pass for the wrong reason.
+      const at = this.children.indexOf(k);
+      if (at >= 0) this.children.splice(at, 1);
+      k.parent = this;
+      this.children.push(k);
+    }
     return kids[0];
   }
   removeChild(...kids) {

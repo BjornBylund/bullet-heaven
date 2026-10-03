@@ -9,6 +9,7 @@ import { fireShot, HOSTILE } from './shots.js';
 import { sfx, setTrack } from './audio.js';
 import {
   BOSSES, BOSS_IDS, bossType, bossForIndex,
+  FINAL_BOSS, FINAL_AFTER,
   initBossState, updateBossBehavior, bossTint,
 } from './boss.js';
 import {
@@ -174,6 +175,7 @@ export function initEnemies() {
   // an import cycle, so reading BOSSES during evaluation would hit the
   // temporal dead zone whenever boss.js was reached first.
   for (const id of BOSS_IDS) TYPES['boss_' + id] = bossType(BOSSES[id]);
+  TYPES['boss_' + FINAL_BOSS.id] = bossType(FINAL_BOSS);
 
   G.enemies = new Pool(() => {
     const s = new PIXI.Sprite(G.tex.enemy.lump);
@@ -218,6 +220,7 @@ export function resetEnemies() {
   nextBoss = CFG.spawn.bossEvery;
   warned = false;
   G.boss = null;
+  G.finalBoss = false;
   G.bossIndex = 0;
   G.bossWarn = 0;
   G.bossWarnDef = null;
@@ -300,14 +303,47 @@ export function spawnEnemy(typeName, x, y, scaleMul) {
   e.s.alpha = def.phase ? 0.72 : 1;
   e.s.visible = true;
   if (def.behavior === 'boss') {
-    initBossState(e, def.bossDef);
     // shot damage scales with the run like every other shooter's
-    e.shotDef.dmg = Math.round(e.shotDef.dmg * d.dmg);
+    initBossState(e, def.bossDef, d.dmg);
     G.boss = e;
   }
   e.hpBg.visible = false;
   e.hpFill.visible = false;
   return e;
+}
+
+/**
+ * Brings in the run's last fight.
+ *
+ * Spawned directly rather than through the schedule, because it is not ON the
+ * schedule -- it answers the third boss's death, whenever that happens. The
+ * banner runs at the same time rather than ahead of it: the player has just
+ * earned a breath, and the Ruin's own APPROACH walk is the warning.
+ */
+function summonFinalBoss() {
+  G.finalBoss = true;
+  const b = ringPoint(rand(0, TAU));
+  const e = spawnEnemy('boss_' + FINAL_BOSS.id, b.x, b.y);
+  if (!e) { G.finalBoss = false; return; }    // retried on the next kill
+  G.bossWarnDef = FINAL_BOSS;
+  G.bossWarn = CFG.spawn.bossWarn * 2;        // it gets a longer announcement
+  sfx.bossWarn();
+  shake(20);
+}
+
+/**
+ * Dev: bring the ending on now, from wherever the run happens to be.
+ *
+ * Clears the live boss without routing through `killEnemy`, so it does not
+ * drop loot, award credit, or fire the on-death hook that would summon a
+ * second Ruin behind this one.
+ */
+export function forceFinalBoss() {
+  if (G.boss && G.boss.alive) { G.boss.alive = false; G.boss = null; }
+  G.bossIndex = FINAL_AFTER;
+  G.finalBoss = false;
+  summonFinalBoss();
+  return G.boss;
 }
 
 export function updateSpawner(dt) {
@@ -349,14 +385,16 @@ export function updateSpawner(dt) {
     G.bossWarn -= dt;
     if (G.bossWarn <= 0) G.bossWarnDef = null;
   }
-  if (!warned && G.t >= nextBoss - CFG.spawn.bossWarn) {
+  if (!warned && !G.finalBoss && G.t >= nextBoss - CFG.spawn.bossWarn) {
     warned = true;
     G.bossWarnDef = bossForIndex(G.bossIndex);
     G.bossWarn = CFG.spawn.bossWarn;
     sfx.bossWarn();
   }
 
-  if (G.t >= nextBoss) {
+  // Once the ending has begun nothing else is scheduled. A routine boss
+  // wandering into the last fight would turn a climax into a traffic jam.
+  if (G.t >= nextBoss && !G.finalBoss) {
     // Nothing about the schedule moves until the boss is actually standing in
     // the world. Advancing first meant a failed spawn still consumed the slot,
     // so the encounter was not delayed -- it was deleted, and the next one in
@@ -381,6 +419,11 @@ export function updateSpawner(dt) {
 /** Returns true if this hit killed the enemy. */
 export function damageEnemy(e, amount, opts) {
   if (!e.alive) return false;
+  // THE RUIN TAKES NO DAMAGE. It is not a fight to be won -- it is how the run
+  // ends. Absorbing the hit silently, with no flash and no damage number, is
+  // the honest signal: a number that appears and changes nothing invites the
+  // player to keep trying, and the answer to "how much more" is never.
+  if (e.bossDef && e.bossDef.final) return false;
   const o = opts || {};
   e.hp -= amount;
   e.flash = 0.11;
@@ -407,6 +450,9 @@ function killEnemy(e) {
   if (G.boss === e) {
     sfx.bossDie();
     G.boss = null;
+    // Killing the last scheduled boss summons the ending. The Ruin itself can
+    // never reach here -- it takes no damage -- so there is no won branch.
+    if (G.bossIndex >= FINAL_AFTER && !G.finalBoss) summonFinalBoss();
     // the death gets its own beat: a wave that clears the boss's own fire
     // off the screen, so the fight ends on a visible full stop
     shockwave(e.x, e.y, 20, 620, 0.7, e.tint);
@@ -536,9 +582,16 @@ export function updateEnemies(dt) {
 
     const dx = p.x - e.x, dy = p.y - e.y;
     const dist2 = dx * dx + dy * dy;
-    if (dist2 > despawn2) {
+    // A BOSS IS NEVER RECYCLED FOR BEING FAR AWAY. Despawning exists to stop
+    // stray chaff accumulating off screen, and applying it to a boss made
+    // "walk away for twenty seconds" a way to delete the encounter: the player
+    // outruns it, it crosses the radius, and the fight simply stops existing.
+    // For the final boss that is worse than a cheat, it is a dead end -- no
+    // further boss is scheduled once the ending has begun, so the run could
+    // never finish at all. It keeps following instead, and the Ruin's rage
+    // eventually makes it faster than the player.
+    if (dist2 > despawn2 && !e.boss) {
       e.alive = false;
-      if (G.boss === e) G.boss = null;    // do not leave a dangling boss
       continue;
     }
 
@@ -548,6 +601,20 @@ export function updateEnemies(dt) {
     const visible = !offscreen(e.x, e.y, e.r);
 
     if (e.behavior === 'boss') {
+      // KEEP THE BOSS ON TOP OF THE SWARM.
+      //
+      // Draw order inside the layer is pool-creation order, which has nothing
+      // to do with what is alive -- measured mid-fight with the Ruin at child
+      // index 686 of 900 and 60 of the 61 live enemies on screen drawn over
+      // it. The boss was rendering correctly and was simply buried, which is
+      // indistinguishable from invisible when it is also the one boss with no
+      // health bar.
+      //
+      // `addChild` on an existing child moves it to the end of the list, which
+      // is the top of the layer. Guarded so the splice only runs when the pool
+      // has grown since the last raise, rather than every frame.
+      const kids = G.layers.enemies.children;
+      if (kids[kids.length - 1] !== e.s) G.layers.enemies.addChild(e.s);
       updateBossBehavior(e, dt, ux, uy, dist, speed);
     } else if (e.behavior === 'ranged') {
       ranged++;
@@ -611,7 +678,10 @@ export function updateEnemies(dt) {
   // Driven from liveness rather than hooked at each spawn and death site, so a
   // boss that dies, despawns, or is cleared by a restart all land here. setTrack
   // returns immediately when the track is already right.
-  setTrack(G.boss && G.boss.alive ? 'boss' : 'main');
+  // Three tracks, chosen from liveness: the Ruin gets its own, because the
+  // boss theme is an escalation and this is not one.
+  const live = G.boss && G.boss.alive;
+  setTrack(live ? (G.boss.bossDef && G.boss.bossDef.final ? 'ruin' : 'boss') : 'main');
   G.enemies.sweep((e) => {
     e.s.visible = false;
     e.hpBg.visible = false;

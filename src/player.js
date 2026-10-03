@@ -89,6 +89,7 @@ export function recomputeStats() {
 
 export function damagePlayer(amount) {
   const p = G.player;
+  if (G.godMode) return;          // dev only; see BH.god()
   if (p.invuln > 0) return;
   const dealt = Math.max(1, amount - p.stats.armor);
   p.hp -= dealt;
