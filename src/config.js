@@ -104,6 +104,20 @@ export const CFG = {
     // restacking -- but a field dropped at a location cannot, so an On Kill
     // field trigger would otherwise spawn one per corpse and run away.
     fieldCap: 6,
+
+    // Geometry for a spell that has been given ORBITING movement but was not
+    // born a field. A field already carries a radius in `range`, so it needs
+    // none of this; a projectile's `range` is a TRAVEL DISTANCE (460px), and
+    // reading it as an orbit radius would fling the bodies a screen and a half
+    // away and inflate each one to a 200px blob. These are in line with the
+    // trigger fields that already orbit -- Solid Defense's stones sit at 90px
+    // and are 26 across.
+    orbit: {
+      dist: 120,     // px from the player the bodies circle at
+      body: 30,      // radius of each body, before size runes
+      life: 2.5,     // seconds, when the source spell has no lifetime of its own
+      tick: 0.5,     // seconds between damage ticks, likewise
+    },
     // A trail is MANY small short-lived patches -- that is what makes it a
     // trail -- so it cannot live under the same ceiling as a dropped vortex.
     // At 560 px/s and a patch every 44px it lays about 13 a second, so a five

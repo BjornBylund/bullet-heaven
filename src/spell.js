@@ -36,7 +36,9 @@ export const freeSlots = (node) => slotsOf(node) - node.children.length;
 
 const isTrigger = (entry) => RUNES[entry.id] && RUNES[entry.id].kind === 'trigger';
 
-const newFlags = () => ({
+// Exported so the test suite can assert that every flag the compiler can
+// produce is classified as read or deliberately unread by some entity kind.
+export const newFlags = () => ({
   pierce: 0, homing: 0, split: 1, knock: 0,
   scatter: 0, ring: 0, line: 0, cone: 0, spiral: 0,
   orbit: 0, pull: 0, anchor: 0,
@@ -322,6 +324,27 @@ function compileTrigger(rd, entry, parentDmg, depth, ctx) {
 
 function finalise(c) {
   for (const s of c.statuses) if (s.magFrac) s.mag = c.stats.dmg * s.magFrac;
+
+  // ORBIT turns a spell's output into bodies that circle the player, whatever
+  // focus produced them. The field runtime already does exactly that, so an
+  // orbiting spell of any kind is routed through it -- but a projectile or a
+  // burst arrives without the numbers a field takes for granted. It has no
+  // lifetime and no tick rate, and its `range` means travel, not radius.
+  //
+  // Filling those in here, once, is what lets the runtime stay a single code
+  // path. Fields are left exactly as they were: `range` is already their
+  // radius, and several trigger effects depend on that reading.
+  if (c.flags.orbit) {
+    const o = CFG.spell.orbit;
+    if (c.focusId === 'field') {
+      c.stats.orbitDist = c.stats.range;
+    } else {
+      c.stats.orbitDist = o.dist;
+      c.stats.orbitSize = o.body;
+      c.stats.life = c.stats.life || o.life;
+      c.stats.tick = c.stats.tick || o.tick;
+    }
+  }
   // A trail is a tiny anchored field the projectile drips behind itself. Built
   // here rather than at runtime so the hot loop still never walks the tree.
   if (c.flags.trail > 0 && c.focusId === 'projectile') c.trail = makeTrail(c);

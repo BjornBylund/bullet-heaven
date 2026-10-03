@@ -10,6 +10,7 @@
 #                         headers and silently serves stale ES modules, which
 #                         cost real debugging time, so the no-store server ships.
 #   tools/                the balance benches the README documents.
+#   test/                 the rune and spawn suites. `npm test` runs them.
 #   docs/                 the design spec.
 #   .claude/launch.json   encodes "serve.py on port 5174" -- the documented way
 #                         to run this, useful to anyone who clones it.
@@ -19,7 +20,8 @@
 __pycache__/
 *.py[cod]
 
-# Node. There is no package.json today; this is for if tooling ever arrives.
+# Node. package.json exists only to carry the `npm test` scripts -- there are no
+# dependencies, so node_modules should never appear. Ignored in case it does.
 node_modules/
 npm-debug.log*
 yarn-error.log*

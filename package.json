@@ -1,0 +1,14 @@
+{
+  "name": "bullet-heaven",
+  "private": true,
+  "type": "module",
+  "description": "Static PixiJS bullet heaven. No build step: index.html loads src/main.js as a module.",
+  "scripts": {
+    "test": "npm run test:consumes && npm run test:spawn && npm run test:matrix",
+    "test:matrix": "node --import ./test/register.mjs test/run.mjs",
+    "test:consumes": "node --import ./test/register.mjs test/consumes.mjs",
+    "matrix": "node --import ./test/register.mjs test/run.mjs --verbose",
+    "check:red": "node tools/check-red.mjs",
+    "test:spawn": "node --import ./test/register.mjs test/spawn.mjs"
+  }
+}

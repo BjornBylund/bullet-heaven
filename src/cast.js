@@ -114,7 +114,10 @@ export function castSpell(c, x, y, inAngle) {
     if (t) angle = Math.atan2(t.y - y, t.x - x);
   }
 
-  if (c.focusId === 'field') {
+  // Orbiting bodies are placed by the field emitter whatever focus made them:
+  // it is the only path that assigns each body its slot on the circle and
+  // refreshes the set instead of restacking it.
+  if (c.focusId === 'field' || f.orbit) {
     emitField(c, x, y, angle, copies);
   } else {
     for (let i = 0; i < copies; i++) {
@@ -208,13 +211,34 @@ function emitField(c, x, y, angle, copies) {
 // smaller patches that sweep the field, rather than one big stationary one.
 const ORBIT_FIELD_SCALE = 0.45;
 
+/**
+ * How far through its own life an entity is when the DISTANCE condition fires.
+ *
+ * "Distance" is really "partway through", and each kind measures that in the
+ * only units it has: a projectile in travel, a burst in how far the shockwave
+ * has expanded, a field in elapsed life. Only the projectile reading existed,
+ * which meant a Distance trigger socketed on a Burst or a Field could never
+ * fire at all -- the editor offered it, it charged attunement, and nothing
+ * ever happened.
+ */
+const DISTANCE_AT = 0.6;
+
+/** Fires the distance condition once, the first time `progress` passes it. */
+function checkDistance(ent, c, progress) {
+  if (ent.distFired || progress < DISTANCE_AT) return;
+  ent.distFired = true;
+  fireTriggers(ent, c, 'distance', ent.x, ent.y, ent.angle);
+}
+
 function spawn(c, x, y, angle, orbitIndex, orbitCount) {
   const e = G.spellEntities.spawn();
   const st = c.stats;
   const f = c.flags;
   const range = st.range * G.player.stats.area;
 
-  e.kind = c.focusId;
+  // An orbiting spell runs on the field update path regardless of its focus --
+  // circling the player is what a field already knows how to do.
+  e.kind = f.orbit ? 'field' : c.focusId;
   e.c = c;
   e.eid = nextEid++;
   e.x = x; e.y = y;
@@ -262,8 +286,13 @@ function spawn(c, x, y, angle, orbitIndex, orbitCount) {
     // fell through to a hardcoded 30 -- collapsing a radius-100 field to 30 the
     // moment Self-Centered was socketed, and leaving size runes scaling 30
     // instead of 100. Reported as "size adjustment isn't working".
-    e.range = f.orbit ? (f.baseSize || range * ORBIT_FIELD_SCALE) * f.size
-                      : range * f.size;
+    // `orbitSize` is set by the compiler only for spells that were NOT born
+    // fields, and is the one number that keeps a converted projectile from
+    // becoming a 200px blob: its `range` is a travel distance.
+    e.range = st.orbitSize !== undefined
+      ? st.orbitSize * f.size
+      : (f.orbit ? (f.baseSize || range * ORBIT_FIELD_SCALE) * f.size
+                 : range * f.size);
     e.baseRadius = e.range;
     e.radius = e.range;
     e.life = st.life;
@@ -461,10 +490,7 @@ function updateProjectile(ent, dt, near) {
     s.width = s.height = ent.radius * 2.5;
   }
 
-  if (!ent.distFired && ent.travelled >= ent.range * 0.6) {
-    ent.distFired = true;
-    fireTriggers(ent, c, 'distance', ent.x, ent.y, ent.angle);
-  }
+  checkDistance(ent, c, ent.travelled / Math.max(1, ent.range));
   if (!ent.returning && ent.travelled >= ent.range) {
     if (f.returns) ent.returning = true;
     else { ent.alive = false; return; }
@@ -493,6 +519,8 @@ function updateBurst(ent, dt, near) {
   ent.age += dt;
   ent.prevRadius = ent.radius;
   ent.radius = ent.range * Math.min(1, ent.age / c.stats.expand);
+
+  checkDistance(ent, c, ent.age / Math.max(0.01, c.stats.expand));
 
   const s = ent.s;
   s.width = s.height = ent.radius * 2;
@@ -528,9 +556,15 @@ function updateField(ent, dt, near, p) {
   if (ent.life <= 0) { ent.alive = false; return; }
   ent.age += dt;
 
+  checkDistance(ent, c, ent.age / Math.max(0.01, c.stats.life));
+
   if (f.orbit) {
     const a = ent.age * ent.spin + (ent.orbitIndex / ent.orbitCount) * TAU;
-    const r = c.stats.range * G.player.stats.area;
+    // Distance from the player, which is NOT the body's own radius. For a field
+    // the two coincide and `orbitDist` is just its range; for anything else the
+    // compiler supplies a real orbit radius.
+    const r = (c.stats.orbitDist !== undefined ? c.stats.orbitDist : c.stats.range)
+            * G.player.stats.area;
     ent.x = p.x + Math.cos(a) * r;
     ent.y = p.y + Math.sin(a) * r;
   } else if (!f.anchor) {

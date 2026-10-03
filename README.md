@@ -48,6 +48,23 @@ three-deep nest on Cone, in a 250-enemy crowd — peaks at **189 live entities a
 3.32 ms/frame**, about 5x headroom, against 0.39 ms for a bare Cone. The entity
 pool does not grow.
 
+`Partway through` (the condition Gust of Wind uses) fires once, three fifths of
+the way through an entity's life, and each kind measures that in the only units
+it has: a projectile in travel, a burst in how far its shockwave has expanded, a
+field in elapsed time. Only the projectile reading existed at first, so the rune
+could be socketed on a Burst or a Field, charge attunement, and never fire at
+all — one of the holes the rune matrix found.
+
+`Orbiting` works the same way: it is a property of a spell, not of fields.
+Setting it routes any focus's output through the field emitter, which is the one
+path that gives each body a slot on the circle and refreshes the set instead of
+restacking it. A converted spell needs geometry it was never compiled with — a
+projectile's `range` is a travel distance, so read as an orbit radius it would
+fling the bodies 460px out and inflate each into a 200px blob — so
+`CFG.spell.orbit` supplies the missing numbers: 120px out, 30px across, in line
+with the trigger fields that already orbit. Fields keep their own reading of
+`range`, which several trigger effects depend on.
+
 **Field is no longer a playable Focus**, but it is still an entity *kind*:
 Solid Defense, Flash of Swords, Perfect Storm and the fire trail all spawn field
 entities and compile from `FOCUSES.field`. That is why the entry survives in the
@@ -249,6 +266,22 @@ four-beat loop, and that loop *is* the design:
 | **WINDUP** | stops dead and flashes white, faster as it completes. The tell. |
 | **EXECUTE** | runs one attack pattern |
 | **RECOVER** | walks at you, vulnerable, then picks the next pattern |
+
+**A boss is exempt from the population cap, and its slot in the rotation is not
+consumed until it is standing in the world.** Both halves matter. `spawnEnemy`
+refuses to spawn once `maxEnemies` bodies are alive, which is right for the
+swarm and wrong for the one entity the schedule exists to deliver -- and the
+boss call ignored the refusal, having already advanced `nextBoss` and
+`bossIndex`. So a full field did not delay a boss, it deleted it: the banner
+played, the screen shook, nothing arrived, and the next boss in the rotation
+took the missing one's place.
+
+It is reachable in ordinary play. Simulated against the real director, a run
+where the player clears bosses but not the swarm pins at the 1500 cap by minute
+30, and from minute 32.5 **every remaining boss in the run was lost**. Covered
+now by `npm run test:spawn`, which asserts a boss still arrives with the field
+at the cap, that the exemption does not leak to the swarm, and that a
+forty-minute run skips none of its sixteen bosses.
 
 In a genre whose only input is movement, a threat is fair only if you can see it
 coming, and interesting only if reacting costs you position. The windup is what

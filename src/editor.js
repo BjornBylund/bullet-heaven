@@ -41,7 +41,7 @@ const WHEN_LABEL = {
   spawn: 'Triggered on spawn',
   hit: 'Triggered on hit',
   kill: 'Triggered on kill',
-  distance: 'Triggered on distance',
+  distance: 'Triggered partway through',
 };
 
 let el = {};

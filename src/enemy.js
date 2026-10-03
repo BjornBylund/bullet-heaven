@@ -240,9 +240,15 @@ function ringPoint(angle) {
 }
 
 export function spawnEnemy(typeName, x, y, scaleMul) {
-  if (G.enemies.count >= CFG.spawn.maxEnemies) return null;
   const def = TYPES[typeName];
   if (!def) return null;
+  // The population cap bounds the cost of the SWARM, and a boss is one body.
+  // Refusing it here is never the right trade: a field pinned at the cap used
+  // to swallow the boss silently -- after the banner and the screen shake had
+  // already played -- and because the schedule advanced anyway, that boss was
+  // gone for the rest of the run. Measured from minute 32.5 onward, every boss
+  // in the run was lost this way.
+  if (!def.boss && G.enemies.count >= CFG.spawn.maxEnemies) return null;
   const d = difficulty();
   const sm = scaleMul || 1;
 
@@ -339,16 +345,23 @@ export function updateSpawner(dt) {
   }
 
   if (G.t >= nextBoss) {
-    nextBoss += CFG.spawn.bossEvery;
-    warned = false;
-    const def = bossForIndex(G.bossIndex++);
+    // Nothing about the schedule moves until the boss is actually standing in
+    // the world. Advancing first meant a failed spawn still consumed the slot,
+    // so the encounter was not delayed -- it was deleted, and the next one in
+    // the rotation took its place.
+    const def = bossForIndex(G.bossIndex);
     const b = ringPoint(rand(0, TAU));
-    spawnEnemy('boss_' + def.id, b.x, b.y);
-    shake(14);
-    // a boss arrives with an escort, so it cannot simply be kited in the open
-    for (let i = 0; i < 8 + Math.floor(d.minutes); i++) {
-      const q = ringPoint(rand(0, TAU));
-      spawnEnemy(chooseType(pool, rangedCap), q.x, q.y);
+    const boss = spawnEnemy('boss_' + def.id, b.x, b.y);
+    if (boss) {
+      nextBoss += CFG.spawn.bossEvery;
+      warned = false;
+      G.bossIndex++;
+      shake(14);
+      // a boss arrives with an escort, so it cannot simply be kited in the open
+      for (let i = 0; i < 8 + Math.floor(d.minutes); i++) {
+        const q = ringPoint(rand(0, TAU));
+        spawnEnemy(chooseType(pool, rangedCap), q.x, q.y);
+      }
     }
   }
 }

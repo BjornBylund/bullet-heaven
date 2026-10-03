@@ -138,7 +138,7 @@ export const TRIGGERS = {
       kind: 'projectile', count: 1, look: 'wind',
       dmgPct: [0.30, 0.45, 0.70], speed: 400, range: 300, size: 14,
     },
-    desc: (l) => `After travelling 60% of Range, casts a wind ball. ` +
+    desc: (l) => `After 60% of its travel, expansion or duration, casts a wind ball. ` +
                  `Damage ${Math.round(lv([0.30, 0.45, 0.70], l) * 100)}%.`,
   },
 
