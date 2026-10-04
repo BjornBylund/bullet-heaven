@@ -184,6 +184,10 @@
   #edstats span { color:#7f92ad; }
   #edstats span b { color:#e8eef7; }
   #edstats .over b { color:#ff7a6b; }
+  /* Only present when there is something to spend, and loud when there is. */
+  #edlevel { display:none; background:#1d3a2a; border-color:#2f6b4a; color:#79e0a4; }
+  #edlevel.on { display:inline-block; animation:pulse 1.4s ease-in-out infinite; }
+  #edlevel:hover { background:#255c3a; border-color:#4fd98a; color:#b6f5cf; }
 
   #edbody { flex:1; display:flex; min-height:0; }
   .edpane { width:266px; padding:14px; overflow-y:auto; background:#050910; }
@@ -342,6 +346,7 @@
         <div id="edhead">
           <div id="edtabs"></div>
           <div id="edstats"></div>
+          <button class="btn small" id="edlevel">LEVEL UP</button>
           <button class="btn small" id="edclose">CLOSE &nbsp;E</button>
         </div>
         <div id="edbody">

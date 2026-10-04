@@ -54,15 +54,25 @@ let msg = '';
 let msgErr = false;
 let graph = null;
 
-export function initEditor() {
+/**
+ * Called when the player spends a pending level. Supplied by main.js rather
+ * than imported, because the upgrade screen lives there and importing it would
+ * close a cycle: main -> editor -> main.
+ */
+let onLevelUp = null;
+
+export function initEditor(handlers) {
+  onLevelUp = (handlers && handlers.onLevelUp) || null;
   el = {
     panel: $('editor'), tabs: $('edtabs'), stats: $('edstats'),
     left: $('edleft'), right: $('edright'), inv: $('edinv'),
     canvas: $('edcanvas'), links: $('edlinks'), nodes: $('ednodes'),
     msg: $('edmsg'), close: $('edclose'), nag: $('nag'),
+    level: $('edlevel'),
   };
   el.close.addEventListener('click', closeEditor);
   el.nag.addEventListener('click', openEditor);
+  el.level.addEventListener('click', () => { if (onLevelUp) onLevelUp(); });
 
   // Pointer listeners live on window so a re-render mid-drag cannot orphan them.
   window.addEventListener('pointermove', onPointerMove);
@@ -209,11 +219,27 @@ function act(result) {
   refreshSlots();
 }
 
+// What the nag last rendered. It is refreshed every frame now, because pending
+// levels accumulate during play with nothing else to announce them, and
+// rewriting innerHTML sixty times a second for an unchanged string is waste.
+let nagText = null;
+
 export function refreshNag() {
   if (!el.nag) return;
-  const n = G.running && !G.over ? unplacedCount() : 0;
-  el.nag.classList.toggle('on', n > 0 && !open);
-  if (n > 0) el.nag.innerHTML = `${n} RUNE${n === 1 ? '' : 'S'} UNPLACED &mdash; PRESS E`;
+  const live = G.running && !G.over;
+  const levels = live ? G.pendingLevels : 0;
+  const runes = live ? unplacedCount() : 0;
+
+  // Levels outrank runes: one is a choice the player is holding, the other is
+  // a reminder they can act on whenever they like.
+  const text = levels > 0
+    ? `${levels} LEVEL UP${levels === 1 ? '' : 'S'} READY &mdash; PRESS E`
+    : runes > 0
+      ? `${runes} RUNE${runes === 1 ? '' : 'S'} UNPLACED &mdash; PRESS E`
+      : '';
+
+  el.nag.classList.toggle('on', text !== '' && !open);
+  if (text !== nagText) { el.nag.innerHTML = text; nagText = text; }
 }
 
 // ---------------------------------------------------------------------------
@@ -319,6 +345,13 @@ function renderTabs(b) {
 }
 
 function renderStats(b) {
+  // Levels are SPENT here now rather than interrupting the fight. The stat
+  // growth already landed when the level did -- this is the upgrade card, and
+  // holding it costs the player nothing but the choice.
+  const pending = G.pendingLevels;
+  el.level.classList.toggle('on', pending > 0);
+  el.level.textContent = pending > 1 ? `LEVEL UP ×${pending}` : 'LEVEL UP';
+
   const entry = b.spells[sel];
   if (!entry) return;
   const n = countNodes(entry.spell);

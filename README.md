@@ -131,6 +131,23 @@ limit on cascade size — see *Known risks*.
 **There are no passive stat cards.** Every card on the level-up screen is spell
 content; health and a baseline damage ramp are granted automatically per level.
 
+**Levels are spent when the player chooses, not when they are earned.** The
+card screen used to appear the instant the XP bar filled, which is reliably
+halfway through dodging something. Nothing is lost by waiting: the LEVEL
+already applied — `gainXp` raises `p.level` and the stat growth with it, and
+the pending count only ever tracked unspent upgrade *cards*. So the count sits
+on the HUD (`2 LEVEL UPS READY — PRESS E`) and is cashed in from the editor,
+where the player can already see the spell the upgrade would go into. One click
+spends the whole queue, one card screen after another: having asked for the
+levels, the player wants the levels, and a second click between each card is a
+toll rather than a decision. The editor reopens when the queue is empty.
+
+**The level-up sound stays with the level, not the card.** It fires in
+`gainXp`, at the moment the bar fills and the stats apply — which is the thing
+that actually happened. Playing it on the card screen would be a fanfare for
+opening a menu, minutes later and at a time of the player's choosing. It plays
+once however many levels a single pickup crossed.
+
 The editor (press **E**) is a **drag-and-drop node graph**. Drag a rune from the
 inventory onto a node to link it there, drag a placed node onto another to
 relink its whole subtree, or drag it back to the inventory to take it off. Valid

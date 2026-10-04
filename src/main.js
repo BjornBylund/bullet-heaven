@@ -98,7 +98,7 @@ async function boot() {
   initShots();
   initPlayer();
   initBook();
-  initEditor();
+  initEditor({ onLevelUp: claimLevelUp });
   initUI({ onStart: startRun, onRestart: restart });
 
   app.renderer.on('resize', () => {
@@ -290,22 +290,50 @@ function endRun() {
   showGameOver(result);
 }
 
-/** One card screen per pending level, so a chest can grant several. */
-function maybeLevelUp() {
-  if (G.over || G.pendingLevels <= 0 || isChoosing() || isEditorOpen()) return;
+/**
+ * Spends ONE pending level, on the player's command.
+ *
+ * Levels used to interrupt: the card screen appeared the instant the XP bar
+ * filled, which is halfway through dodging something. Nothing is lost by
+ * waiting, because the LEVEL already applied -- `gainXp` raises `p.level` and
+ * marks stats dirty immediately, and `pendingLevels` only ever counted unspent
+ * upgrade CARDS. The choice is now held until the player asks for it, from the
+ * spell editor, where they can already see what the upgrade would go into.
+ *
+ * Spends the WHOLE queue: one card screen after another until it is empty.
+ * Having asked for the levels, the player wants the levels -- making them
+ * click the button again between each card is a toll, not a decision.
+ *
+ * The sound is NOT played here. It belongs to earning the level, which
+ * happened minutes ago in `gainXp`.
+ */
+function claimLevelUp() {
+  if (G.over || G.pendingLevels <= 0 || isChoosing()) return;
+  const reopen = isEditorOpen();
+  if (reopen) closeEditor();
   G.paused = true;
-  sfx.levelUp();
-  showLevelUp(() => {
-    G.pendingLevels--;
-    if (G.pendingLevels > 0) { maybeLevelUp(); return; }
-    // Explaining runes is only worth doing once the player is holding one, so
-    // this waits for the card screens to finish and fires only if a rune
-    // actually landed in the bag. It keeps the game paused and resumes it
-    // itself, which is why the early return matters.
-    if (unplacedCount() > 0 && maybeTeachRunes(() => { G.paused = false; refreshNag(); })) return;
+
+  const done = () => {
     G.paused = false;
+    if (reopen && G.running && !G.over) openEditor();
     refreshNag();
-  });
+  };
+
+  const next = () => {
+    showLevelUp(() => {
+      G.pendingLevels--;
+      // Still holding levels, and the run is still live: straight to the next
+      // card rather than back through the editor.
+      if (G.pendingLevels > 0 && !G.over) { next(); return; }
+      // Explaining runes is only worth doing once the player is holding one,
+      // so this fires only if a rune actually landed in the bag. It keeps the
+      // game paused and resumes it itself, which is why the early return
+      // matters.
+      if (unplacedCount() > 0 && maybeTeachRunes(done)) return;
+      done();
+    });
+  };
+  next();
 }
 
 function tick(ticker) {
@@ -329,9 +357,12 @@ function tick(ticker) {
     if (steps >= MAX_STEPS) acc = 0;
 
     if (G.over) endRun();
-    else maybeLevelUp();
 
     updateHud();
+    // Pending levels now accumulate during play with nothing else to announce
+    // them, so the nag has to be kept current rather than refreshed only when a
+    // screen opens or closes. It no-ops unless the text actually changed.
+    refreshNag();
   }
 
   render();

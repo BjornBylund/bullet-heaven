@@ -1,6 +1,7 @@
 import { G } from './state.js';
 import { xpForLevel } from './config.js';
 import { damageNumber, burst, shake } from './fx.js';
+import { sfx } from './audio.js';
 
 /**
  * Character progression: XP, levels, healing, gold.
@@ -13,13 +14,20 @@ import { damageNumber, burst, shake } from './fx.js';
 export function gainXp(amount) {
   const p = G.player;
   p.xp += amount * p.stats.xpMul;
+  let gained = 0;
   while (p.xp >= p.xpNeed) {
     p.xp -= p.xpNeed;
     p.level++;
     p.xpNeed = xpForLevel(p.level);
     G.pendingLevels++;
     G.statsDirty = true;
+    gained++;
   }
+  // The sound marks the LEVEL, which is the thing that just happened and
+  // already applied. Spending the card is a separate act, minutes later and
+  // from a menu, where a fanfare would be announcing nothing. Played once
+  // however many levels a single pickup crossed.
+  if (gained) sfx.levelUp();
 }
 
 /**
@@ -36,6 +44,7 @@ export function grantLevels(n) {
   p.xpNeed = xpForLevel(p.level);
   G.pendingLevels += n;
   G.statsDirty = true;
+  if (n > 0) sfx.levelUp();
 }
 
 export function heal(amount) {
