@@ -14,7 +14,7 @@ import { initCasting, clearCasting, updateSpellEntities } from './cast.js';
 import { initShots, clearShots, updateShots } from './shots.js';
 import {
   initBook, resetBook, updateSpellbook, bookSummary, grantRune, recompileAll,
-  tryPlace, book,
+  tryPlace, book, unplacedCount,
 } from './spellbook.js';
 import { walkNodes } from './spell.js';
 import { initPlayer, resetPlayer, updatePlayer, recomputeStats } from './player.js';
@@ -27,6 +27,7 @@ import {
 import {
   initUI, updateHud, refreshSlots, showStart, showPaused,
   showLevelUp, showGameOver, hideGameOver, isChoosing, toggleMusic,
+  maybeTeachRunes, isTeaching, dismissTutorial,
 } from './ui.js';
 
 /**
@@ -108,6 +109,13 @@ async function boot() {
 
   onPress((code) => {
     if (!G.running || G.over || isChoosing()) return;
+    // The tutorial owns the keyboard while it is up, or E would open the
+    // editor BEHIND it -- and E is the one key the panel tells you to press.
+    if (isTeaching()) {
+      if (code === 'KeyE') { dismissTutorial(); openEditor(); refreshNag(); }
+      else if (code === 'Enter' || code === 'Space') dismissTutorial();
+      return;
+    }
     if (code === 'KeyM') { toggleMusic(); return; }
     if (code === 'KeyE') {
       isEditorOpen() ? closeEditor() : openEditor();
@@ -287,8 +295,14 @@ function maybeLevelUp() {
   sfx.levelUp();
   showLevelUp(() => {
     G.pendingLevels--;
-    if (G.pendingLevels > 0) maybeLevelUp();
-    else { G.paused = false; refreshNag(); }
+    if (G.pendingLevels > 0) { maybeLevelUp(); return; }
+    // Explaining runes is only worth doing once the player is holding one, so
+    // this waits for the card screens to finish and fires only if a rune
+    // actually landed in the bag. It keeps the game paused and resumes it
+    // itself, which is why the early return matters.
+    if (unplacedCount() > 0 && maybeTeachRunes(() => { G.paused = false; refreshNag(); })) return;
+    G.paused = false;
+    refreshNag();
   });
 }
 

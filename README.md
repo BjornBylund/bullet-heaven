@@ -1058,6 +1058,32 @@ through `setVolume` would be worse than useless for this, because it persists to
 `localStorage` and would leave the player's own game muted the next time they
 opened it.
 
+## Teaching the rune system
+
+One panel, shown once, the first time a rune actually lands in the player's
+bag. Not on the start screen: advice about a system the player has not met yet,
+with nothing to apply it to, is a wall of text between them and the game.
+
+It fires after the level-up cards are done and only if a rune was among them —
+taking "Expand" on your first level teaches nothing, so it waits. The game stays
+paused until the panel is dismissed.
+
+The panel explains four things and stops: that a rune does nothing until it is
+socketed, that `E` opens the editor, the difference between a MODIFIER and a
+TRIGGER, and — the one the editor never says out loud — **that a rune hung
+under a trigger modifies that trigger rather than the spell above it**. That
+last point is the whole depth of the system and the easiest thing to never
+notice.
+
+`E` dismisses the panel and opens the editor in one go, because `E` is the key
+the panel tells you to press and it would otherwise open the editor *behind* it.
+Enter and Space just dismiss.
+
+Seen-ness lives in `localStorage` under `bh.taught`, guarded the same way the
+score table is: a player whose storage throws simply sees it again next run,
+which is a far better failure than a crash on level two. `resetTutorial()` in
+`ui.js` makes it eligible again.
+
 ## High scores
 
 Ten best runs, in `localStorage` under `bh.scores`. The game is static files on

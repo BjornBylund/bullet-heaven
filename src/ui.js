@@ -30,6 +30,7 @@ export function initUI(handlers) {
     paused: $('paused'), gameover: $('gameover'),
     gotitle: $('gotitle'), results: $('results'),
     mutebtn: $('mutebtn'), vol: $('vol'),
+    tutorial: $('tutorial'), tutclose: $('tutclose'),
     scores: $('scores'), scorebanner: $('scorebanner'),
     clearscores: $('clearscores'), beststrip: $('beststrip'),
     bosswrap: $('bosswrap'), bossname: $('bossname'), bossfill: $('bossfill'),
@@ -53,6 +54,8 @@ export function initUI(handlers) {
   }
 
   $('againbtn').addEventListener('click', handlers.onRestart);
+
+  el.tutclose.addEventListener('click', dismissTutorial);
 
   // Destructive and unrecoverable, so it asks. The button is deliberately the
   // quietest thing on the panel -- it exists for the person handing the laptop
@@ -80,6 +83,59 @@ export function initUI(handlers) {
 }
 
 const show = (panel, on) => panel.classList.toggle('show', on);
+
+// ---------------------------------------------------------------------------
+// first-rune tutorial
+// ---------------------------------------------------------------------------
+
+const TAUGHT_KEY = 'bh.taught';
+
+/**
+ * Shown once, the first time a rune is actually acquired -- not on the start
+ * screen, where it would be advice about a thing the player has not seen yet
+ * and has nothing to apply it to.
+ *
+ * Guarded the same way scores.js guards storage: it can be absent, or throw on
+ * every access. A player who cannot persist the flag simply sees this again
+ * next run, which is a far better failure than a crash on level two.
+ */
+function alreadyTaught() {
+  try { return globalThis.localStorage.getItem(TAUGHT_KEY) === '1'; } catch { return false; }
+}
+
+function markTaught() {
+  try { globalThis.localStorage.setItem(TAUGHT_KEY, '1'); } catch { /* shown again next run */ }
+}
+
+/**
+ * Returns true if it took over the screen, in which case the caller must leave
+ * the game paused and let `onClose` resume it.
+ */
+export function maybeTeachRunes(onClose) {
+  if (alreadyTaught()) return false;
+  markTaught();
+  pendingTeach = onClose;
+  show(el.tutorial, true);
+  return true;
+}
+
+export function isTeaching() { return pendingTeach !== null; }
+
+/** Closes the panel and hands control back to whatever paused the game. */
+export function dismissTutorial() {
+  if (!pendingTeach) return;
+  show(el.tutorial, false);
+  const done = pendingTeach;
+  pendingTeach = null;
+  done();
+}
+
+/** Dev/testing: make the tutorial eligible again. */
+export function resetTutorial() {
+  try { globalThis.localStorage.removeItem(TAUGHT_KEY); } catch { /* nothing to undo */ }
+}
+
+let pendingTeach = null;
 
 export function toggleMusic() {
   const on = !isMusicEnabled();

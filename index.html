@@ -126,6 +126,19 @@
   #results .v { font-weight:700; }
   #gameover h1 { color:#ff7a6b; text-shadow:0 0 30px #ff7a6b44; }
 
+  /* ---- first-rune tutorial ---- */
+  #tutbody { width:470px; text-align:left; font-size:12.5px; color:#9fb4d4; line-height:1.7; }
+  #tutbody p { margin:0 0 11px; }
+  #tutbody b { color:#dce7f7; font-weight:700; }
+  .tutkey { display:inline-block; min-width:18px; text-align:center; font-size:11px;
+    color:#bcd9ff; border:1px solid #2a3547; border-radius:4px; padding:1px 7px;
+    background:#121a28; margin-right:8px; }
+  .tutkind { display:flex; gap:10px; align-items:baseline; margin:0 0 7px; }
+  .tutkind .pill { flex:none; display:inline-block; font-size:10px; letter-spacing:1px;
+    padding:2px 9px; border-radius:20px; background:#1b2436; color:#9fc4ff; }
+  .tutkind .pill.trg { background:#1d3a2a; color:#79e0a4; }
+  #tutbody .note { border-left:2px solid #4d8fff; padding-left:12px; color:#bcd9ff; }
+
   /* ---- high scores ---- */
   #scorebanner { font-size:12px; letter-spacing:2px; color:#ffd36e; min-height:15px; }
   #scorebanner.best { color:#6ee7a0; text-shadow:0 0 18px #6ee7a055; }
@@ -352,6 +365,30 @@
     <div class="panel" id="paused">
       <h1>PAUSED</h1>
       <div class="hint">ESC to resume &nbsp;&bull;&nbsp; E for the spell editor</div>
+    </div>
+
+    <!-- first rune: how the rune system works -->
+    <div class="panel" id="tutorial">
+      <h2>YOUR FIRST RUNE</h2>
+      <div id="tutbody">
+        <p>A rune does nothing while it sits in your bag. It has to go
+           <b>into a spell</b>.</p>
+        <p><span class="tutkey">E</span>opens the spell editor. Drag the rune onto the
+           graph, or click the rune and then click a socket.</p>
+        <div class="tutkind">
+          <span class="pill">MODIFIER</span>
+          <span>changes the thing it hangs under &mdash; more damage, more copies, more reach.</span>
+        </div>
+        <div class="tutkind">
+          <span class="pill trg">TRIGGER</span>
+          <span>casts an effect of its own whenever its condition fires: on spawn, on hit, on kill.</span>
+        </div>
+        <p class="note"><b>Where you attach it matters.</b> A rune hung under a trigger
+           modifies <b>that trigger</b>, not the spell above it. That is the whole game.</p>
+        <p>Two limits, shown in the editor: <b>sockets</b> are how many runes fit,
+           <b>focus</b> is what they cost.</p>
+      </div>
+      <button class="btn" id="tutclose">GOT IT</button>
     </div>
 
     <!-- game over -->
