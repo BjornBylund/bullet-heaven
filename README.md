@@ -657,6 +657,14 @@ seconds. Holding a pack in place and then removing its ability to leave are the
 same effect bought twice, on a rune that was already the strongest in the game.
 The Chill came off when the pull was repaired.
 
+**The pull now reaches exactly as far as the sprite is drawn.** It used to
+reach `radius * 2` while the sprite was drawn `radius * 2.3` across — so it
+dragged bodies from 1.8x the visible edge, and foes plainly outside the tornado
+slid inward for no reason the screen gave. Both now come from one constant,
+`FIELD_SPRITE_SCALE`, so they cannot drift apart again. For a 150px field that
+is a 173px edge: a body at 147px is pulled to 83px, a body at 198px does not
+move at all.
+
 That had a second-order effect worth recording: **the Chill was doing part of
 the gripping.** Slowed bodies are easier to drag, so the same pull of 70 held a
 passing crowd 97px from the eye with Chill and 120px without — the gather is

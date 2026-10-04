@@ -212,6 +212,19 @@ function emitField(c, x, y, angle, copies) {
 const ORBIT_FIELD_SCALE = 0.45;
 
 /**
+ * How many times its radius a field's sprite is drawn across.
+ *
+ * Named because the PULL reaches exactly as far, and the two drifting apart is
+ * a lie the player cannot see through: the vortex reached `radius * 2` while
+ * drawing at `radius * 2.3` wide -- so it dragged bodies from 1.8x the visible
+ * edge, and foes outside the tornado slid in for no reason the screen gave.
+ */
+const FIELD_SPRITE_SCALE = 2.3;
+
+/** Half of the above: centre to visible edge, which is the pull's reach. */
+const FIELD_REACH = FIELD_SPRITE_SCALE / 2;
+
+/**
  * How far through its own life an entity is when the DISTANCE condition fires.
  *
  * "Distance" is really "partway through", and each kind measures that in the
@@ -578,7 +591,7 @@ function updateField(ent, dt, near, p) {
   }
 
   const s = ent.s;
-  s.width = s.height = ent.radius * 2.3;
+  s.width = s.height = ent.radius * FIELD_SPRITE_SCALE;
   s.rotation += ent.look.spin * dt;
   // Each look states its own weight, but a descriptor may override it -- the
   // trail lays flame sprites dozens deep and needs far less than flame's own.
@@ -588,13 +601,14 @@ function updateField(ent, dt, near, p) {
   // A tornado drags the swarm inward, which is what makes it feel different
   // from a field that merely sits there.
   if (f.pull) {
-    G.grid.query(ent.x, ent.y, ent.radius * 2, near);
+    const reach = ent.radius * FIELD_REACH;
+    G.grid.query(ent.x, ent.y, reach, near);
     for (let i = 0; i < near.length; i++) {
       const t = near[i];
       if (!t.alive || t.boss) continue;
       const dx = ent.x - t.x, dy = ent.y - t.y;
       const d = Math.hypot(dx, dy) || 1;
-      if (d > ent.radius * 2) continue;
+      if (d > reach) continue;
       // `pull` is a SPEED, in px/s, and the KNOCK_DECAY factor is what makes
       // it one. Pushing into the knockback channel without it settles at
       // input/9: a tornado configured at 130 dragged bodies inward at 14px/s
