@@ -200,8 +200,10 @@ async function boot() {
 }
 
 function syncScreen() {
-  G.screen.w = G.app.renderer.width / G.app.renderer.resolution;
-  G.screen.h = G.app.renderer.height / G.app.renderer.resolution;
+  // app.screen is already in CSS pixels. renderer.width is too in Pixi v8, so
+  // dividing it by resolution halves the viewport on a retina display.
+  G.screen.w = G.app.screen.width;
+  G.screen.h = G.app.screen.height;
 }
 
 let lastFocus = 'projectile';
