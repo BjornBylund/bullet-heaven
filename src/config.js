@@ -136,7 +136,12 @@ export const CFG = {
     // six, i.e. about a sixth of the trail, and then stopped drawing entirely
     // until they expired.
     trailCap: 72,
-    maxSpells: 4,
+    // Three, down from four. The cap is what decides whether a loadout goes
+    // WIDE or DEEP: sockets are the binding constraint in every spell, so a
+    // fourth spell is another bare Focus competing for the same runes rather
+    // than another finished idea. It also pulls the worst-case entity envelope
+    // the pools are sized against down by a quarter.
+    maxSpells: 3,
     startNodes: 4,
     startAttunement: 6,
     // Link slots: how many children a node accepts. This is the structural

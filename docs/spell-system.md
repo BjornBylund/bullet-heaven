@@ -106,8 +106,9 @@ Two caps per spell, on deliberately different axes:
 - New spells arrive as a **bare Focus** — no starter runes. Building it up is the
   point, and a starter kit would push every player toward the same builds.
 
-**Worst-case envelope: 4 spells × 6 nodes.** This is the number entity pools are
-designed against.
+**Worst-case envelope: 3 spells × 6 nodes.** This is the number entity pools are
+designed against. It was 4 until the cap came down; the pools were sized for
+that and so have headroom to spare at the current cap.
 
 ### 2.2 Link slots
 
@@ -261,9 +262,9 @@ The build's power then comes from three places, all of them spell content:
 - **Capacity** - `Expand` (+1 socket for every spell) and `Attune` (+2 focus for
   every spell) remain as cards.
 
-> Measured after the change: a hands-off run reached level 29 by minute 10 with
-> all four spells full at 6 sockets and six triggers across the book, holding the
-> swarm at 200-280 enemies. Sockets were the binding constraint in every spell
+> Measured after the change, while the cap was still 4: a hands-off run reached
+> level 29 by minute 10 with all four spells full at 6 sockets and six triggers
+> across the book, holding the swarm at 200-280 enemies. Sockets were the binding constraint in every spell
 > (6/6 used) while focus sat slack at 2-5 of 6 - see the open question in §2.1.
 
 ## 6. Acquisition and editing

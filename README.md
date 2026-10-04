@@ -663,7 +663,8 @@ simultaneous spell entities and ~108 kills/sec.
 
 Simulation cost alone, measured headlessly at ~270 enemies with six triggers
 live across four spells: **2.5ms per frame**, roughly 7× headroom inside a 60fps
-budget.
+budget. That was taken when the spell cap was 4; it is 3 now, so the real
+headroom is wider than the figure suggests.
 
 ## Architecture
 
