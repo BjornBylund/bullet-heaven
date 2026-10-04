@@ -74,6 +74,23 @@ reports confident nonsense. Each of these was a wrong answer first:
 - **Conditional runes get their condition.** Frostbite pays out on Frozen
   targets; a bare spell applies none, so it measures as dead.
 
+## What the matrix cannot see
+
+Its world never calls `updateEnemies`, on purpose — a chasing crowd converges
+from every angle and hides where a spell puts its damage. But enemy POSITION is
+integrated there, so **nothing that moves an enemy shows up in a fingerprint at
+all**.
+
+That blind spot let Perfect Storm pass while its headline promise did nothing.
+Its `pull` was fed raw into the knockback channel, which bleeds off at 9/s, so
+a configured 130 produced 14px/s of real drift against a zombie's 74px/s walk —
+invisible. The rune still changed damage and kills, so "something happened" was
+true and the matrix was satisfied.
+
+`npm run test:forces` covers that gap: that `pull` is a speed in px/s, that the
+tornado measurably grips a crowd walking past it, and that knockback is still a
+shove rather than a launch.
+
 ## Keeping it honest
 
 `npm run test:consumes` greps `src/cast.js` for every flag the table claims is

@@ -280,6 +280,12 @@ export function spawnEnemy(typeName, x, y, scaleMul) {
   e.shotMul = d.dmg;
   // pooled objects are reused across types, so the cached shot must be dropped
   e.shotDef = null;
+  // ...and so must the boss definition, for exactly the same reason. The Ruin
+  // never dies, so its pooled object is only ever released by a restart -- and
+  // the next run handed that object to an ordinary zombie, which kept
+  // `bossDef.final` and was therefore INVULNERABLE. A stale field on a pooled
+  // entity is only ever one spawn away from being read as live.
+  e.bossDef = null;
   e.xp = def.xp;
   e.tint = def.tint;
   e.boss = !!def.boss;
@@ -416,6 +422,15 @@ export function updateSpawner(dt) {
   }
 }
 
+/**
+ * How fast the knockback channel bleeds off, per second.
+ *
+ * Exported because a SUSTAINED push into that channel -- a tornado's pull --
+ * settles at `input / KNOCK_DECAY` rather than at `input`, so anything that
+ * wants to express itself in px/s has to multiply by this to cancel it.
+ */
+export const KNOCK_DECAY = 9;
+
 /** Returns true if this hit killed the enemy. */
 export function damageEnemy(e, amount, opts) {
   if (!e.alive) return false;
@@ -423,7 +438,11 @@ export function damageEnemy(e, amount, opts) {
   // ends. Absorbing the hit silently, with no flash and no damage number, is
   // the honest signal: a number that appears and changes nothing invites the
   // player to keep trying, and the answer to "how much more" is never.
-  if (e.bossDef && e.bossDef.final) return false;
+  //
+  // `e.boss` is checked as well as `bossDef`, so that even a stale definition
+  // left on a recycled pooled entity cannot make an ordinary enemy immortal.
+  // That is not hypothetical -- it is the bug this line caused.
+  if (e.boss && e.bossDef && e.bossDef.final) return false;
   const o = opts || {};
   e.hp -= amount;
   e.flash = 0.11;
@@ -655,7 +674,7 @@ export function updateEnemies(dt) {
     e.x += (e.vx + e.kx) * dt;
     e.y += (e.vy + e.ky) * dt;
     // knockback decays fast, so a hit reads as a shove rather than a launch
-    const kd = 1 - 9 * dt;
+    const kd = 1 - KNOCK_DECAY * dt;
     e.kx *= kd; e.ky *= kd;
 
     const s = e.s;

@@ -164,12 +164,29 @@ export const TRIGGERS = {
       // the bare spell's kill rate, five times the next best rune in the game.
       // Capping concurrent fields slowed the loop; these numbers stop it being
       // the only rune worth taking.
-      kind: 'field', count: 1, pull: 130, look: 'vortex',
+      //
+      // `pull` is a SPEED in px/s. It used to be fed raw into the knockback
+      // channel, which bleeds off at 9/s, so 130 produced 14px/s of real drift
+      // -- against a zombie's 74px/s walk, which is why the vortex visibly did
+      // nothing. Measured on a crowd walking past it over four seconds, the
+      // old behaviour held them 11px closer than no tornado at all.
+      //
+      // 70 is chosen to roughly cancel a zombie's walk: the crowd settles
+      // around 85px from the eye, well inside the 150px radius so they keep
+      // taking ticks, and can still be walked out of. 130 is a singularity --
+      // everything collapses to within 10px and stays there.
+      // NO CHILL. It used to apply 3-5 stacks per 0.35s tick, and Chill
+      // FREEZES at 20 -- so a crowd the vortex had already gathered was frozen
+      // solid inside about two seconds. Holding a pack in place and then
+      // removing its ability to leave are the same effect bought twice, and
+      // this rune was already the strongest in the game before the pull was
+      // repaired. The gather is the effect now; Frostbite and Icy Wind are
+      // still there for anyone who wants the freeze on top.
+      kind: 'field', count: 1, pull: 70, look: 'vortex',
       dmgPct: [0.18, 0.24, 0.38], range: 150, life: [3, 3.5, 4.5], tick: 0.35, size: 0,
-      status: { idx: CHILL, stacks: [3, 4, 5] },
     },
     desc: (l) => `On kill, spawns a tornado that drags foes inward. ` +
-                 `Damage ${Math.round(lv([0.18, 0.24, 0.38], l) * 100)}% · Apply ${lv([3, 4, 5], l)} Chill.`,
+                 `Damage ${Math.round(lv([0.18, 0.24, 0.38], l) * 100)}%.`,
   },
 
   fulgorsSparks: {

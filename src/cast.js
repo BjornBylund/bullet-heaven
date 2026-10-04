@@ -2,7 +2,7 @@ import * as PIXI from './pixi.js';
 import { G, offscreen } from './state.js';
 import { CFG } from './config.js';
 import { Pool, TAU, rand } from './util.js';
-import { damageEnemy } from './enemy.js';
+import { damageEnemy, KNOCK_DECAY } from './enemy.js';
 import { sfx } from './audio.js';
 import { applyStatus, damageTakenMul, BURN, CHILL } from './status.js';
 import { burst } from './fx.js';
@@ -595,8 +595,13 @@ function updateField(ent, dt, near, p) {
       const dx = ent.x - t.x, dy = ent.y - t.y;
       const d = Math.hypot(dx, dy) || 1;
       if (d > ent.radius * 2) continue;
-      t.kx += (dx / d) * f.pull * dt;
-      t.ky += (dy / d) * f.pull * dt;
+      // `pull` is a SPEED, in px/s, and the KNOCK_DECAY factor is what makes
+      // it one. Pushing into the knockback channel without it settles at
+      // input/9: a tornado configured at 130 dragged bodies inward at 14px/s
+      // against a zombie's 74px/s walk, which is invisible, and is why the
+      // vortex looked like it was not pulling at all.
+      t.kx += (dx / d) * f.pull * KNOCK_DECAY * dt;
+      t.ky += (dy / d) * f.pull * KNOCK_DECAY * dt;
     }
   }
 

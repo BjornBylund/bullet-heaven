@@ -289,5 +289,40 @@ console.log('\nit is never buried by the swarm');
   check('nothing is drawn over it', above === 0, `${above} sprites above`);
 }
 
+// ---------------------------------------------------------------------------
+console.log('\nits invulnerability does not outlive it');
+{
+  const { resetEnemies } = await import('../src/enemy.js');
+  createWorld({ crowd: 0, atSeconds: 450 });
+  const ruin = spawnEnemy('boss_' + FINAL_BOSS.id, 300, 0);
+  check('the Ruin itself is immune', damageEnemy(ruin, 1e9, {}) === false);
+
+  // Start a new run. THE RUIN NEVER DIES, so a restart is the only thing that
+  // ever returns its pooled object to the free list -- and the next run handed
+  // that object to an ordinary zombie, which kept `bossDef.final` and was
+  // therefore unkillable. Reported from play as "an enemy was invulnerable
+  // after I started a new game".
+  resetEnemies();
+
+  let recycled = null;
+  for (let i = 0; i < 80 && !recycled; i++) {
+    const e = spawnEnemy('zombie', i * 10, 0);
+    if (e === ruin) recycled = e;
+  }
+  check('the pool handed the Ruin object back out', !!recycled,
+    recycled ? 'reused' : 'not reused in 80 spawns -- test is inconclusive');
+
+  if (recycled) {
+    check('it is no longer flagged as a boss', recycled.boss === false);
+    check('the stale boss definition is cleared', recycled.bossDef === null,
+      String(recycled.bossDef && recycled.bossDef.id));
+    const hp = recycled.hp;
+    const killed = damageEnemy(recycled, 1e9, {});
+    check('and it takes damage like anything else', recycled.hp < hp,
+      `${Math.round(hp)} -> ${Math.round(recycled.hp)}`);
+    check('and can be killed', killed === true);
+  }
+}
+
 console.log(failures ? `\n${failures} failing` : '\nall ending checks pass');
 process.exit(failures ? 1 : 0);

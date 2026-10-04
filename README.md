@@ -319,6 +319,15 @@ pools, reached by surviving rather than by damage. And **the health bar is
 hidden for it**, because a full bar on an invulnerable boss reads as a boss you
 are failing to hurt, which is a worse lie than no bar at all.
 
+It also broke a third thing, found in play rather than in testing: *an ordinary
+enemy was invulnerable in the run after a Ruin fight*. The Ruin never dies, so
+a restart is the only thing that ever returns its pooled entity to the free
+list — and the next run handed that entity to a zombie, which kept `bossDef`
+pointing at the Ruin and was therefore immortal. Pooled entities carry whatever
+the last occupant left on them; `shotDef` was already reset on spawn for
+exactly this reason, and `bossDef` now is too. The damage check also requires
+`e.boss`, so a stale definition alone can no longer make anything immortal.
+
 Measured against a level-30 player (303 hp) with the boss made invulnerable, so
 the numbers describe the boss rather than a build:
 
@@ -619,10 +628,23 @@ damage bonus so the tradeoff is real in both directions.
 | Rune | Was | Now | Why |
 |---|---|---|---|
 | Perfect Storm | +2,757% kills | **+1,107%** | on-kill tornados dragged bodies together and spawned more tornados; still the strongest rune, no longer three times the field |
+| Perfect Storm, again | pull 130 (= 14px/s), 3-5 Chill | **pull 70 in px/s, no Chill** | reported from play as "the tornado doesn't pull". `pull` was fed raw into the knockback channel, which bleeds off at 9/s, so the configured number produced a fourteenth of itself — 14px/s against a zombie's 74px/s walk. Measured over four seconds, the old vortex held a passing crowd **11px** closer than no tornado at all. Repairing it made the rune far too strong, so the Chill came off with it |
 | Fulgor's Sparks | power 4 | **71** | four sparks at 40% of a 20 damage spell is 8 damage against a 59 HP enemy — it could not function at any level |
 | Silent Grudge | power 14 | **78** | growth worked, but base pierce capped a projectile at three hits so the extra reach found no targets |
 | Short Fuse | power 4 (−100% on Field) | **58** | see above |
 | Gust of Wind | power 38 | **65** | the weakest free trigger |
+
+Perfect Storm applied **3–5 Chill per 0.35s tick**, and Chill freezes at 20 — so
+a crowd the vortex had already gathered was frozen solid inside about two
+seconds. Holding a pack in place and then removing its ability to leave are the
+same effect bought twice, on a rune that was already the strongest in the game.
+The Chill came off when the pull was repaired.
+
+That had a second-order effect worth recording: **the Chill was doing part of
+the gripping.** Slowed bodies are easier to drag, so the same pull of 70 held a
+passing crowd 97px from the eye with Chill and 120px without — the gather is
+visibly weaker now, which is the point. Frostbite and Icy Wind are still there
+for anyone who wants the freeze on top.
 | Piercing Eyes | power 29 | 17, now free | measured at crowd 80, where a projectile finds only ~5 bodies however much it may pierce. At 200+ it finds ~13, so this is a late-game scaling rune the bench under-rates — see below |
 
 Cost and tier were then re-derived from the final numbers, moving 15 more runes.
