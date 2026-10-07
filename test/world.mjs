@@ -237,7 +237,6 @@ export function createWorld({
           if (!e.alive) continue;
           if (preStatus.includes('burn')) applyStatus(e, BURN, 4, 6);
           if (preStatus.includes('chill')) applyStatus(e, CHILL, 2, 0);
-          if (preStatus.includes('freeze')) e.frozen = 1;
         }
       }
 

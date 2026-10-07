@@ -316,7 +316,7 @@ No element system. Status effects instead, applied by runes.
 
 | Status | Stacks | Effect |
 |---|---|---|
-| **Chill** | to 20 | slows, scaling with stacks; **at 20 → Freeze**, consuming all stacks |
+| **Chill** | to 20 | slows, scaling with stacks, to 64% at the cap. No conversion. |
 | **Burn** | yes | damage over time, scaling with stacks |
 | **Weaken** | TBD | reduces enemy contact damage |
 | **Brittle** | tight cap | increases damage taken (multiplies everything — needs a short leash) |
@@ -429,7 +429,15 @@ What survives unchanged:
 - Per-activation trigger cast cap (single number, no redesign).
 - Global per-frame spawn ceiling.
 - `On Expire`, `On Proximity`, `On Interval`.
-- Intensity-stacking refinements; `Brittle`/`Weaken` numbers.
+- Intensity-stacking refinements; `Brittle` numbers.
+
+> **Superseded.** Freeze and Weaken were both removed after this was written.
+> Chill now only slows, with no conversion at the cap: a threshold makes a
+> status binary, and the freeze quietly did half the work of anything that
+> gathered a crowd. Weaken had one applier, no payoff rune, and an effect no
+> damage bench could see. Burn damage also no longer comes from the casting
+> spell — it comes from the player's level. The sections above are kept as the
+> reasoning that was true at the time; see the README for what shipped.
 - Elements. Statuses are exactly the payload they would carry, so nothing is
   wasted if they return.
 - An `Echo` rune that casts another equipped spell (needs cycle detection).

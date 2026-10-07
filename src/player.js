@@ -3,7 +3,6 @@ import { G } from './state.js';
 import { CFG, xpForLevel } from './config.js';
 import { burst, shake, damageNumber } from './fx.js';
 import { getAxis } from './input.js';
-import { contactDamageMul } from './status.js';
 import { sfx } from './audio.js';
 
 /** The player: movement, derived stats, contact damage, death. */
@@ -136,7 +135,7 @@ export function updatePlayer(dt) {
     const rr = e.r + p.radius;
     if (dx * dx + dy * dy > rr * rr) continue;
     e.atkCd = 0.6;
-    damagePlayer(e.dmg * contactDamageMul(e));
+    damagePlayer(e.dmg);
     if (G.over) return;
   }
 

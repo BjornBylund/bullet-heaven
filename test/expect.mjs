@@ -22,9 +22,11 @@
 
 // Read by every kind: set in castSpell/spawn, or applied in dealDamage.
 const SHARED = [
+  // Read by updateSpellEntities for every kind, not by one update function.
+  'flags.blocks',
   'stats.dmg', 'stats.cooldown', 'stats.range',
   'flags.size', 'flags.split', 'flags.crit', 'flags.critVsBurn',
-  'flags.vsFrozen', 'flags.vsChilled', 'flags.knock', 'flags.baseSize',
+  'flags.vsChilled', 'flags.vsChillStack', 'flags.knock', 'flags.baseSize',
   'statuses', 'look', 'triggerCount',
 ];
 
@@ -61,6 +63,19 @@ export const CONSUMES = {
 // Cone is a Projectile at runtime -- same entity, same update function.
 CONSUMES.cone = CONSUMES.projectile;
 
+/**
+ * Flags whose ONLY effect is to move an enemy.
+ *
+ * The matrix never calls `updateEnemies` -- a chasing crowd hides where a
+ * spell puts its damage -- and enemy position is integrated there, so a rune
+ * that exists to shove or drag bodies changes nothing a fingerprint can see.
+ * That is a limit of this harness, not a defect in the rune, and saying so is
+ * better than listing a dozen identical exceptions.
+ *
+ * These are covered by `npm run test:forces`, which does run enemy movement.
+ */
+export const MOVES_ENEMIES = ['flags.knock', 'flags.pull'];
+
 /** Does this focus's code path ever read the key the rune changed? */
 export function consumes(kind, key) {
   const list = CONSUMES[kind] || CONSUMES.projectile;
@@ -85,9 +100,16 @@ export const WORLD = {
 
   // Conditional on a debuff a bare spell never applies. Holding the condition
   // open measures the rune rather than the spell that failed to set it up.
-  frostbite: { preStatus: ['freeze'] },
+  // Freeze is gone -- chill just slows now -- so the only conditions left to
+  // hold open are burn and chill themselves.
   burnedToDeath: { preStatus: ['burn'] },
   deepFreeze: { preStatus: ['chill'] },
+  absoluteZero: { preStatus: ['chill'] },
+
+  // Windshear shoves AND pierces. The shove is invisible here like every other
+  // movement rune, so the pierce is all that is left to measure -- and pierce
+  // needs a crowd dense enough for the extra hits to find bodies.
+  windshear: DENSE,
 };
 
 /**
@@ -143,10 +165,6 @@ export const CLAIMS = {
  * is a decision that a rune may charge attunement and do nothing.
  */
 export const EXPECT = {
-  // Rolling Stone's boulder is born with pierce 99 -- it already ploughs
-  // through everything -- so more pierce has nothing left to buy.
-  'piercingEyes>rollingStone': false,
-
   // Spiraling Rage sets `spiral`, and updateProjectile reads
   // `if (f.spiral) ... else if (f.homing)`. Spiral wins outright, so homing on
   // a spiralling bolt is dead by construction. Worth knowing when reading the
@@ -163,6 +181,10 @@ export const EXPECT = {
   // circle you by definition. Self-Centered has no orbiting left to add.
   'selfCentered>solidDefense': false,
   'selfCentered>flashOfSwords': false,
+  // Both triggers already apply Chill, and stacks cap. More Chill from a
+  // modifier beneath them lands on bodies that are already chilled.
+  'icyWind>cruelThorns': false,
+  'icyWind>firstSnow': false,
 
   // A trigger's projectile is born with pierce 0, and these triggers cast INTO
   // the crowd, so it dies on the first body it touches. Measured: Gust of
@@ -180,12 +202,13 @@ export const EXPECT = {
 };
 
 export const REASON = {
-  'piercingEyes>rollingStone': 'the boulder already has pierce 99',
   'messengerOfPeace>spiralingRage': 'spiral takes precedence over homing in updateProjectile',
   'firewalking>spiralingRage': 'the trigger already applies Burn',
   'firewalking>furiousOutburst': 'the trigger already applies Burn',
   'selfCentered>solidDefense': 'the stones already orbit',
   'selfCentered>flashOfSwords': 'the blades already orbit',
+  'icyWind>cruelThorns': 'the trigger already applies Chill',
+  'icyWind>firstSnow': 'the trigger already applies Chill',
   'ret>gustOfWind': 'the wind ball dies on contact after 33px of its 300px range',
   'ret>spiralingRage': 'the bolt dies on contact long before reaching full range',
   'messengerOfPeace>gustOfWind': 'the wind ball dies on contact before homing can curve it',

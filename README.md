@@ -39,8 +39,8 @@ creates entities in the world:
 
 `On Spawn` fires once per **entity** the parent creates, not once per cast, so
 Cone fires it three times — once per bolt, each from that bolt's own position
-and heading. Measured: Cone + Rolling Stone spawns 3 boulders where Projectile
-spawns 1. Orbiting field triggers are unaffected, because they refresh rather
+and heading. Measured when Rolling Stone still existed: Cone + Rolling Stone
+spawned 3 boulders where Projectile spawned 1. Orbiting field triggers are unaffected, because they refresh rather
 than restack: Cone + Solid Defense still yields 2 stones, not 6.
 
 The cost is that on-spawn nests multiply. The worst case the editor allows — a
@@ -104,10 +104,11 @@ left the modifier pool — where builds actually differentiate — barely visibl
 The modifier set is deliberately narrow. Modifiers change **stats**
 (`Heavy Hitter`, `Piercing Eyes`), **spawn shape** (`Frenetic Energy`,
 `Stars Aligned`, `Self-Centered`, `Destructive Path`, `Return`), **applied
-debuffs** (`Firewalking`, `Icy Wind`, `Deep Freeze`, `Potent Burn`), or read the
-**graph** itself (`Pressure Buildup`, `Empty Stomach`).
+debuffs** (`Firewalking`, `Icy Wind`, `Potent Burn`), **move the crowd**
+(`Gale`, `Squall`, `Riptide`, `Windshear`, `Perfect Storm`), or
+read the **graph** itself (`Pressure Buildup`, `Empty Stomach`).
 
-**Conditional damage only ever keys off a debuff** — `Frostbite` (vs frozen),
+**Conditional damage only ever keys off a debuff** —
 `Deep Freeze` (vs chilled), `Burned to Death` (crit vs burning). Conditionals
 based on health thresholds, target size or distance travelled were cut, along
 with on-kill payoffs, to keep the number of rules a player has to hold in their
@@ -277,10 +278,15 @@ Two things are capped directly rather than hoped for:
 - **`maxShots` (70)** — a safety net so a wave of shooters cannot flood the
   screen. Boss patterns are exempt and draw from `bossShotHeadroom` instead.
 
-**Debuffs** stack with per-status rules and drain-based decay. Chill slows, and
-at 20 stacks it converts to a Freeze. No debuff applies hard crowd control
-directly; hard CC is only ever reached through a stack threshold, which is what
-stops a single rune from locking the whole screen permanently.
+**Debuffs** stack with per-status rules and drain-based decay. There are three:
+Chill slows (to 64% at full stacks), Burn is damage over time, Brittle amplifies
+everything the target takes. **No debuff applies crowd control at all.** Chill
+used to convert to a Freeze at full stacks and that was the only stun in the
+game; it went because a threshold makes a status binary — every stack below the
+line is worth nothing and everything above it deletes the enemy — and because
+it quietly did half the work of anything that gathered a crowd. Weaken went with
+it: one applier, no payoff rune, and an effect (less contact damage to you) that
+no damage bench could ever see.
 
 Full design rationale, including rejected alternatives, is in
 [docs/spell-system.md](docs/spell-system.md).
@@ -668,20 +674,91 @@ move at all.
 That had a second-order effect worth recording: **the Chill was doing part of
 the gripping.** Slowed bodies are easier to drag, so the same pull of 70 held a
 passing crowd 97px from the eye with Chill and 120px without — the gather is
-visibly weaker now, which is the point. Frostbite and Icy Wind are still there
-for anyone who wants the freeze on top.
+visibly weaker now, which is the point.
 | Piercing Eyes | power 29 | 17, now free | measured at crowd 80, where a projectile finds only ~5 bodies however much it may pierce. At 200+ it finds ~13, so this is a late-game scaling rune the bench under-rates — see below |
 
 Cost and tier were then re-derived from the final numbers, moving 15 more runes.
 
+### The elements
+
+Four elements, **six runes each, exactly two of them triggers and exactly one
+epic**. That is a constraint on the design rather than on the code, which is
+precisely why `npm run test:elements` enforces it: nothing breaks when an
+element quietly grows a seventh rune or a second epic, the game just stops
+being the thing it was designed as and nobody notices for a month.
+
+| | debuff | the six |
+|---|---|---|
+| **Fire** | Burn | Spiraling Rage `spawn` · Furious Outburst `hit` · Firewalking · Burned to Death · Potent Burn · **Destructive Path** |
+| **Ice** | Chill | First Snow `hit` · Cruel Thorns `hit` · Icy Wind · Deep Freeze · Hoarfrost · **Absolute Zero** |
+| **Air** | — | Gust of Wind `distance` · **Perfect Storm** `kill` · Gale · Squall · Riptide · Windshear |
+| **Stone** | Brittle | Solid Defense `spawn` · Shattering End `kill` · Heavy Burden · Silent Grudge · Fracture · **Monolith** |
+
+Epics in bold. **Stone is Brittle *and* projectile size** — the heavy, slow,
+enormous end of the table, which is why Monolith (size ×2.7, damage ×2, speed
+×0.55) is its epic and why Solid Defense's stones are the thing that eats a
+shot. **Air has no debuff at all**: it moves the crowd instead, which is the
+same thing from the other end in a game whose only input is movement.
+
+Two of the new runes are worth calling out because they cost nothing to build:
+**Riptide** is Gale with the sign flipped — `damageEnemy` pushes along the
+vector away from the hit, so a negative knock drags the body toward it, the
+same line of maths and no new runtime. **Absolute Zero** pays per Chill stack
+rather than a flat bonus for any chill at all, so it is worth nothing on a
+glancing application and ×2.8 at the 20-stack cap. That is what makes Deep
+Freeze's flat bonus the cheaper, shallower alternative rather than a strictly
+worse one.
+
+The thirteen runes outside the elements — damage, pierce, spawn shape, the
+positional pair — stay neutral on purpose, so an elemental build still has
+somewhere to spend its remaining sockets.
+
+Five triggers were cut to make room: Rolling Stone, Fulgor's Sparks,
+Thunderclap, Updraft and Eye of the Storm. Air and Stone each had four trigger
+candidates for two slots, and the limit is the point — without it an element
+becomes a pile of triggers and four cheap modifiers.
+
+### The status rework
+
+Four changes, together:
+
+**Burn damage comes from the player's LEVEL**, not from the spell that lit the
+fire. It used to be a fraction of the host spell's damage, so the same rune was
+worth wildly different amounts depending on where it was socketed, and worth
+almost nothing under a trigger whose damage was already a fraction of a
+fraction. `CFG.burn` is `base 3 + 0.5 per level`, multiplied by the rune's own
+`magFrac` — so Potent Burn is still the rune that makes burn hurt. Measured
+with Firewalking socketed: **394 damage over six seconds at level 1, 962 at
+level 20, 1687 at level 40.**
+
+**Freeze is gone and Chill just slows**, to 64% at full stacks. **Weaken is
+gone** entirely — one applier, no payoff, and an effect no damage bench could
+see. `STATUS_IDS` is down to three, which renumbers `BRITTLE` from 3 to 2.
+
+**An air cluster**, because position is the only resource a movement-only game
+really has. Everything else in the table makes the player's damage bigger;
+these make the crowd be somewhere else. `Gale` (knockback modifier),
+`Squall`, `Riptide` and `Windshear`, around `Gust of Wind` and `Perfect Storm`.
+Perfect Storm was always this rune and finally has a family. `flags.knock` had
+been in the engine since the first commit with no rune granting it.
+
+> The first version of this cluster had four triggers and two epics. The
+> elemental rules cut it to two and one; see **The elements** above.
+
+**Appliers and payoffs are spread across rarities.** They used to cluster at
+the bottom: every payoff was common and free, so the conditional half of a
+combo cost nothing and the applier half carried it. `Deep Freeze` is now a pure
+payoff at rare 1 — it used to apply the Chill it then paid out on, which made
+it the one rune in a cluster that needed nothing else — `Burned to Death` moves
+to rare 1, and `Firewalking` down to common 0 so Burn keeps a cheap applier.
+
 ### Still outstanding
 
-- **Ten runes still measure at or below the noise floor**, and all of them now
-  cost nothing. Several legitimately cannot be seen by a damage bench and were
-  verified working by other means: **Icy Wind** reaches Freeze (chill peaks at 19
-  then converts; enemies were frozen for 487 frame-samples), **Numbing Cold** is
-  purely defensive, **Frostbite** and **Burned to Death** are conditional on
-  statuses a bare Projectile never applies, and **Messenger of Peace** is homing,
+- **Several runes still measure at or below the noise floor.** Some legitimately
+  cannot be seen by a damage bench and are verified by other means:
+  **Burned to Death** and **Deep Freeze** are conditional on statuses a bare
+  Projectile never applies, the air cluster moves enemies rather than damaging
+  them (`npm run test:forces`), and **Messenger of Peace** is homing,
   which is worth nothing when the crowd is dense enough that auto-aim always has
   a target. They are situational rather than broken — but the bench cannot prove
   that, so treat the zero as "unmeasured", not "fine".
@@ -973,8 +1050,8 @@ how to draw it.
 | `bolt` | chevron head, fading tail | the Projectile focus |
 | `flame` | teardrop nose, trailing licks | Furious Outburst, Spiraling Rage |
 | `ice` | hard-edged crystal splinter | Cruel Thorns, First Snow |
-| `stone` | tumbling chunk of rock | Rolling Stone, Solid Defense |
-| `lightning` | jagged forked arc | Fulgor's Sparks |
+| `stone` | tumbling chunk of rock | Solid Defense |
+| `lightning` | jagged forked arc | unused since Fulgor's Sparks was cut |
 | `blade` | crescent, pointed at both tips | Flash of Swords |
 | `wind` | tapering comma of air | Gust of Wind |
 | `vortex` | drawn-in spiral | Perfect Storm |

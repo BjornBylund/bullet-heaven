@@ -4,7 +4,7 @@
   "type": "module",
   "description": "Static PixiJS bullet heaven. No build step: index.html loads src/main.js as a module.",
   "scripts": {
-    "test": "npm run check:red && npm run test:consumes && npm run test:scores && npm run test:forces && npm run test:final && npm run test:spawn && npm run test:matrix",
+    "test": "npm run check:red && npm run test:consumes && npm run test:elements && npm run test:scores && npm run test:forces && npm run test:final && npm run test:spawn && npm run test:matrix",
     "test:matrix": "node --import ./test/register.mjs test/run.mjs",
     "test:consumes": "node --import ./test/register.mjs test/consumes.mjs",
     "matrix": "node --import ./test/register.mjs test/run.mjs --verbose",
@@ -12,6 +12,7 @@
     "test:spawn": "node --import ./test/register.mjs test/spawn.mjs",
     "test:scores": "node --import ./test/register.mjs test/scores.mjs",
     "test:final": "node --import ./test/register.mjs test/final.mjs",
-    "test:forces": "node --import ./test/register.mjs test/forces.mjs"
+    "test:forces": "node --import ./test/register.mjs test/forces.mjs",
+    "test:elements": "node --import ./test/register.mjs test/elements.mjs"
   }
 }

@@ -1,4 +1,4 @@
-import { CHILL, BURN, WEAKEN, BRITTLE } from './status.js';
+import { CHILL, BURN, BRITTLE } from './status.js';
 
 /**
  * Runes, modelled on the Memory cards of Echoes of Mystralia.
@@ -107,25 +107,15 @@ export const TRIGGERS = {
       status: { idx: BURN, stacks: [1, 1, 2] },
     },
     desc: (l) => `On spawn, casts a fire projectile that spirals outward. ` +
-                 `Damage ${Math.round(lv([0.45, 0.80, 1.50], l) * 100)}%.`,
-  },
-
-  rollingStone: {
-    name: 'Rolling Stone', icon: '●', color: 0xb0a48c,
-    tier: 'rare', cost: 2, when: 'spawn',
-    effect: {
-      kind: 'projectile', count: 1, pierce: 99, look: 'stone',
-      dmgPct: [0.25, 0.40, 0.70], speed: 190, range: 700, size: 22,
-    },
-    desc: (l) => `On spawn, rolls a boulder that ploughs through everything. ` +
-                 `Damage ${Math.round(lv([0.25, 0.40, 0.70], l) * 100)}%.`,
+                 `Damage ${Math.round(lv([0.45, 0.80, 1.50], l) * 100)}% · ` +
+                 `Apply ${lv([1, 1, 2], l)} Burn.`,
   },
 
   solidDefense: {
     name: 'Solid Defense', icon: '◆', color: 0x9aa4b2,
     tier: 'common', cost: 1, when: 'spawn',
     effect: {
-      kind: 'field', count: [2, 2, 3], orbit: true, look: 'stone',
+      kind: 'field', count: [2, 2, 3], orbit: true, look: 'stone', blocks: true,
       dmgPct: [0.60, 0.60, 0.60], range: 90, life: 5.5, tick: 0.3, size: 26,
     },
     desc: (l) => `On spawn, sets ${lv([2, 2, 3], l)} stones orbiting you. Damage 60%.`,
@@ -175,30 +165,17 @@ export const TRIGGERS = {
       // around 85px from the eye, well inside the 150px radius so they keep
       // taking ticks, and can still be walked out of. 130 is a singularity --
       // everything collapses to within 10px and stays there.
-      // NO CHILL. It used to apply 3-5 stacks per 0.35s tick, and Chill
-      // FREEZES at 20 -- so a crowd the vortex had already gathered was frozen
+      // NO CHILL. It used to apply 3-5 stacks per 0.35s tick, back when Chill
+      // froze at 20 -- so a crowd the vortex had already gathered was frozen
       // solid inside about two seconds. Holding a pack in place and then
-      // removing its ability to leave are the same effect bought twice, and
-      // this rune was already the strongest in the game before the pull was
-      // repaired. The gather is the effect now; Frostbite and Icy Wind are
-      // still there for anyone who wants the freeze on top.
+      // removing its ability to leave are the same effect bought twice, on a
+      // rune that was already the strongest in the game. The gather is the
+      // effect; the air cluster around it is the rest of the idea.
       kind: 'field', count: 1, pull: 70, look: 'vortex',
       dmgPct: [0.18, 0.24, 0.38], range: 150, life: [3, 3.5, 4.5], tick: 0.35, size: 0,
     },
     desc: (l) => `On kill, spawns a tornado that drags foes inward. ` +
                  `Damage ${Math.round(lv([0.18, 0.24, 0.38], l) * 100)}%.`,
-  },
-
-  fulgorsSparks: {
-    name: "Fulgor's Sparks", icon: '⚡', color: 0xc9a0ff,
-    tier: 'common', cost: 0, when: 'kill',
-    effect: {
-      kind: 'projectile', count: [3, 4, 6], scatter: true, homing: 6, look: 'lightning',
-      dmgPct: [0.35, 0.55, 0.90], speed: 520, range: 420, size: 8,
-      status: { idx: BRITTLE, stacks: [1, 1, 2] },
-    },
-    desc: (l) => `On kill, looses ${lv([3, 4, 6], l)} seeking sparks. ` +
-                 `Damage ${Math.round(lv([0.35, 0.55, 0.90], l) * 100)}% · Apply Brittle.`,
   },
 
   shatteringEnd: {
@@ -212,6 +189,9 @@ export const TRIGGERS = {
     desc: (l) => `On kill, detonates the corpse. ` +
                  `Damage ${Math.round(lv([0.35, 0.55, 0.95], l) * 100)}% · Apply Brittle.`,
   },
+
+  // The mirror of Perfect Storm: a NEGATIVE pull pushes instead of gathering,
+  // which falls out of the same line of maths and needs no new runtime.
 };
 
 // ---------------------------------------------------------------------------
@@ -326,7 +306,7 @@ export const MODIFIERS = {
 
   firewalking: {
     name: 'Firewalking', icon: '♨', color: 0xff8a4c,
-    tier: 'rare', cost: 1,
+    tier: 'common', cost: 0,
     apply: (c, l) => {
       c.statuses.push({ idx: BURN, stacks: lv([1, 2, 4], l), magFrac: 0.22 });
       c.stats.range *= 1 + lv([0.10, 0.15, 0.20], l);
@@ -344,23 +324,25 @@ export const MODIFIERS = {
     desc: (l) => `Speed ${pct(lv([0.25, 0.35, 0.55], l))} · Add ${lv([5, 7, 10], l)} Chill.`,
   },
 
-  numbingCold: {
-    name: 'Numbing Cold', icon: '▼', color: 0xa8b4c6,
+  // --- air: runes that MOVE the crowd rather than damage it ----------------
+  //
+  // The cluster exists because position is the only resource a movement-only
+  // game really has. Everything else in the table makes the player's damage
+  // bigger; these make the crowd be somewhere else, which is the same thing
+  // from the other end. Perfect Storm was already this rune and had no family.
+  //
+  // Knockback is the cheap end and the engine already carried it -- `knock`
+  // has been a flag since the first commit with no rune granting it.
+  gale: {
+    name: 'Gale', icon: '≈', color: 0x9fe3ff,
     tier: 'common', cost: 0,
-    apply: (c, l) => { c.statuses.push({ idx: WEAKEN, stacks: lv([1, 2, 3], l) }); },
-    desc: (l) => `Add ${lv([1, 2, 3], l)} Weaken. Enemies hit you for less.`,
-  },
-
-  frostbite: {
-    name: 'Frostbite', icon: '❆', color: 0x9fe4ff,
-    tier: 'common', cost: 0,
-    apply: (c, l) => { c.flags.vsFrozen += lv([0.30, 0.50, 0.90], l); },
-    desc: (l) => `Damage ${pct(lv([0.30, 0.50, 0.90], l))} against frozen foes.`,
+    apply: (c, l) => { c.flags.knock += lv([170, 300, 520], l); },
+    desc: (l) => `Hits shove foes back (${lv(['weakly', 'hard', 'very hard'], l)}).`,
   },
 
   burnedToDeath: {
     name: 'Burned to Death', icon: '☠', color: 0xff7a3c,
-    tier: 'common', cost: 0,
+    tier: 'rare', cost: 1,
     apply: (c, l) => { c.flags.critVsBurn += lv([0.20, 0.35, 0.60], l); },
     desc: (l) => `Critical chance ${pct(lv([0.20, 0.35, 0.60], l))} against burning foes.`,
   },
@@ -395,14 +377,15 @@ export const MODIFIERS = {
     desc: (l) => `For each empty socket in this spell, Damage ${pct(lv([0.10, 0.15, 0.25], l))}.`,
   },
 
+  // A PURE payoff now. It used to apply the Chill it then paid out on, which
+  // made it the only rune in a cluster that needed nothing else -- and at
+  // common/free, the obvious first pick every time. The chill has to come from
+  // somewhere else, and this is what makes it worth having come.
   deepFreeze: {
     name: 'Deep Freeze', icon: '❊', color: 0x9fe4ff,
-    tier: 'common', cost: 0,
-    apply: (c, l) => {
-      c.statuses.push({ idx: CHILL, stacks: lv([3, 5, 8], l) });
-      c.flags.vsChilled += lv([0.20, 0.35, 0.60], l);
-    },
-    desc: (l) => `Add ${lv([3, 5, 8], l)} Chill · Damage ${pct(lv([0.20, 0.35, 0.60], l))} against chilled foes.`,
+    tier: 'rare', cost: 1,
+    apply: (c, l) => { c.flags.vsChilled += lv([0.35, 0.60, 1.00], l); },
+    desc: (l) => `Damage ${pct(lv([0.35, 0.60, 1.00], l))} against chilled foes.`,
   },
 
   potentBurn: {
@@ -416,9 +399,86 @@ export const MODIFIERS = {
 
   destructivePath: {
     name: 'Destructive Path', icon: '░', color: 0xff9a5c,
-    tier: 'rare', cost: 2,
+    tier: 'epic', cost: 3,
     apply: (c, l) => { c.flags.trail += l; },
     desc: (l) => `Leaves a burning trail behind it (tier ${l}).`,
+  },
+
+  // --- ice ------------------------------------------------------------------
+  hoarfrost: {
+    name: 'Hoarfrost', icon: '❅', color: 0x9fe4ff,
+    tier: 'rare', cost: 2,
+    apply: (c, l) => {
+      c.statuses.push({ idx: CHILL, stacks: lv([8, 11, 15], l) });
+      c.stats.speed *= 1 - lv([0.20, 0.28, 0.38], l);
+    },
+    desc: (l) => `Add ${lv([8, 11, 15], l)} Chill · Speed −${Math.round(lv([0.20, 0.28, 0.38], l) * 100)}%.`,
+  },
+
+  // The ice epic, and the reason to stack Chill rather than just touch it.
+  // Deep Freeze pays a flat bonus for any chill at all; this one pays per
+  // stack, so it is worth nothing on a glancing application and a great deal
+  // at the cap.
+  absoluteZero: {
+    name: 'Absolute Zero', icon: '✸', color: 0x7fd4ff,
+    tier: 'epic', cost: 3,
+    apply: (c, l) => { c.flags.vsChillStack += lv([0.04, 0.06, 0.09], l); },
+    desc: (l) => `Damage +${Math.round(lv([0.04, 0.06, 0.09], l) * 100)}% for each ` +
+                 `Chill stack on the target (up to ` +
+                 `${Math.round(lv([0.04, 0.06, 0.09], l) * 20 * 100)}%).`,
+  },
+
+  // --- air ------------------------------------------------------------------
+  squall: {
+    name: 'Squall', icon: '⌁', color: 0xbcd9ff,
+    tier: 'common', cost: 1,
+    apply: (c, l) => {
+      c.flags.knock += lv([120, 200, 320], l);
+      c.flags.split += lv([1, 1, 2], l);
+    },
+    desc: (l) => `Spawn count +${lv([1, 1, 2], l)} · hits shove foes back.`,
+  },
+
+  // Knockback with the sign flipped. `damageEnemy` pushes along the vector
+  // away from the hit, so a negative value drags the body toward it instead --
+  // the same line of maths, and no new runtime.
+  riptide: {
+    name: 'Riptide', icon: '⥁', color: 0x8fe3c4,
+    tier: 'rare', cost: 1,
+    apply: (c, l) => { c.flags.knock -= lv([200, 340, 540], l); },
+    desc: (l) => `Hits drag foes inward instead of shoving them away.`,
+  },
+
+  windshear: {
+    name: 'Windshear', icon: '⋙', color: 0x9fe3ff,
+    tier: 'rare', cost: 2,
+    apply: (c, l) => {
+      c.flags.knock += lv([280, 460, 720], l);
+      c.flags.pierce += lv([2, 3, 5], l);
+    },
+    desc: (l) => `Pierce +${lv([2, 3, 5], l)} · hits shove foes back hard.`,
+  },
+
+  // --- stone ----------------------------------------------------------------
+  fracture: {
+    name: 'Fracture', icon: '◈', color: 0xff6ad5,
+    tier: 'rare', cost: 1,
+    apply: (c, l) => { c.statuses.push({ idx: BRITTLE, stacks: lv([1, 2, 3], l) }); },
+    desc: (l) => `Add ${lv([1, 2, 3], l)} Brittle. Everything hurts them more.`,
+  },
+
+  // The stone epic: size is the element's other half, and this is the most of
+  // it the table offers. Slow and enormous, which is the trade stone makes.
+  monolith: {
+    name: 'Monolith', icon: '⬣', color: 0xb0a48c,
+    tier: 'epic', cost: 3,
+    apply: (c, l) => {
+      c.flags.size *= 1 + lv([0.70, 1.10, 1.70], l);
+      c.stats.dmg *= 1 + lv([0.40, 0.65, 1.00], l);
+      c.stats.speed *= 1 - lv([0.25, 0.35, 0.45], l);
+    },
+    desc: (l) => `Size ${pct(lv([0.70, 1.10, 1.70], l))} · Damage ${pct(lv([0.40, 0.65, 1.00], l))} · ` +
+                 `Speed −${Math.round(lv([0.25, 0.35, 0.45], l) * 100)}%.`,
   },
 
   ret: {
@@ -431,9 +491,44 @@ export const MODIFIERS = {
 
 // ---------------------------------------------------------------------------
 
+/**
+ * The elements.
+ *
+ * Held here rather than on each rune so the SHAPE of the table is visible in
+ * one place: every element is six runes, exactly two of them triggers and
+ * exactly one of them epic. That is a real constraint on the design -- it is
+ * what stops an element becoming four cheap modifiers and a pile of triggers --
+ * and `npm run test:elements` enforces it, so the rule cannot rot quietly as
+ * runes are added.
+ *
+ * Fire is Burn, Ice is Chill, Stone is Brittle AND projectile size, Air is the
+ * one with no debuff at all: it moves the crowd instead, which is the same
+ * thing from the other end in a game whose only input is movement.
+ *
+ * Runes outside this map belong to no element. They are the plumbing of the
+ * table -- damage, pierce, spawn shape, the positional pair -- and deliberately
+ * stay neutral so an elemental build still has somewhere to spend sockets.
+ */
+export const ELEMENTS = {
+  fire:  ['spiralingRage', 'furiousOutburst', 'firewalking', 'burnedToDeath',
+          'potentBurn', 'destructivePath'],
+  ice:   ['firstSnow', 'cruelThorns', 'icyWind', 'deepFreeze',
+          'hoarfrost', 'absoluteZero'],
+  air:   ['gustOfWind', 'perfectStorm', 'gale', 'squall', 'riptide', 'windshear'],
+  stone: ['solidDefense', 'shatteringEnd', 'heavyBurden', 'silentGrudge',
+          'fracture', 'monolith'],
+};
+
+export const ELEMENT_IDS = Object.keys(ELEMENTS);
+
+/** id -> element, built from the table above so the two cannot disagree. */
+const ELEMENT_OF = Object.create(null);
+for (const el of ELEMENT_IDS) for (const id of ELEMENTS[el]) ELEMENT_OF[id] = el;
+
 export const RUNES = Object.create(null);
 for (const id in TRIGGERS) RUNES[id] = Object.assign({ id, kind: 'trigger' }, TRIGGERS[id]);
 for (const id in MODIFIERS) RUNES[id] = Object.assign({ id, kind: 'modifier' }, MODIFIERS[id]);
+for (const id in RUNES) RUNES[id].element = ELEMENT_OF[id] || null;
 
 export const RUNE_IDS = Object.keys(RUNES);
 export const TRIGGER_IDS = Object.keys(TRIGGERS);

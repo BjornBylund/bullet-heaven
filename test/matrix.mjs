@@ -29,7 +29,7 @@ import { fingerprint, diff } from './observe.mjs';
 import { compiledDiff } from './inspect.mjs';
 import { MODIFIER_IDS, TRIGGER_IDS, RUNES } from '../src/runes.js';
 import { FOCUS_IDS } from '../src/focuses.js';
-import { consumes, WORLD, TREE, CLAIMS, EXPECT, reason } from './expect.mjs';
+import { consumes, WORLD, TREE, CLAIMS, EXPECT, MOVES_ENEMIES, reason } from './expect.mjs';
 
 // `field` is not player-selectable but is still a compile target: triggers host
 // one, and so does the fire trail. A rune broken on fields is broken in play.
@@ -136,6 +136,13 @@ function judge({ id, focus, channels, compiled, fired, isTrigger, underTrigger, 
       return { verdict: 'unseen', why: "the trigger's entities die within the frame they spawn" };
     }
     const live = compiled.filter((d) => consumes(d.kind, d.key));
+    // Checked against the keys THIS KIND READS, not every key the rune set.
+    // Windshear shoves and pierces: on a burst the pierce is dead anyway, so
+    // all that is left is the shove, and the shove is invisible here. Testing
+    // the unfiltered list called that a defect.
+    if (live.length && live.every((d) => MOVES_ENEMIES.includes(d.key))) {
+      return { verdict: 'unseen', why: 'moves enemies; the matrix does not run enemy movement (see test:forces)' };
+    }
     if (!live.length) {
       const keys = [...new Set(compiled.map((d) => d.key))].join(', ');
       return { verdict: 'n/a', why: `${keys} is not read by a ${compiled[0].kind}` };

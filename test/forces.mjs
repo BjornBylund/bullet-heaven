@@ -1,5 +1,6 @@
 /**
- * Forces applied to enemies: knockback, and a field's pull.
+ * Physical interactions the rune matrix cannot see: forces applied to enemies,
+ * and stones blocking enemy fire.
  *
  * These live apart from the rune matrix because the matrix cannot see them.
  * Its world deliberately never calls `updateEnemies` -- a chasing crowd
@@ -173,6 +174,99 @@ console.log('\nknockback is still a shove, not a launch');
   const d = Math.hypot(e.x, e.y);
   check('a hit shoves a body a short way', d > 5 && d < 120, `${d.toFixed(0)}px`);
   check('and it comes to rest', Math.abs(e.kx) < 1, `residual ${e.kx.toFixed(2)}`);
+}
+
+// ---------------------------------------------------------------------------
+console.log('\nGale shoves what it hits');
+{
+  const { updateSpellbook } = await import('../src/spellbook.js');
+  const { compile } = await import('../src/spell.js');
+
+  check('the rune grants knockback at all',
+    compile({ focus: 'projectile', children: [{ id: 'gale', level: 3, children: [] }] }, CAPS)
+      .flags.knock > 0);
+
+  // `knock` had been a flag with no rune granting it since the first commit.
+  // The rune matrix cannot see this one: shoving is enemy MOVEMENT, and that
+  // world never integrates it.
+  const shove = (rune) => {
+    createWorld({
+      focus: 'projectile',
+      tree: rune ? [{ id: rune, level: 3, children: [] }] : [],
+      crowd: 0, atSeconds: 120, seed: 3,
+    });
+    G.player.x = 0; G.player.y = 0;
+    const marks = [];
+    for (let i = 0; i < 10; i++) {
+      const e = spawnEnemy('zombie', 150 + i * 12, 0);
+      e.maxHp = e.hp = 1e12;                // survive, so the shove is visible
+      e.speed = 0;                          // and nothing but the shove moves them
+      marks.push({ e, x0: e.x });
+    }
+    for (let i = 0; i < 60 * 3; i++) { updateSpellbook(STEP); step(); }
+    const moved = marks.filter((m) => m.e.alive).map((m) => m.e.x - m.x0);
+    return moved.reduce((a, b) => a + b, 0) / moved.length;
+  };
+
+  const bare = shove(false);
+  const gale = shove('gale');
+  const riptide = shove('riptide');
+  check('bare hits do not move anything', Math.abs(bare) < 1, `${bare.toFixed(1)}px`);
+  check('Gale pushes them away from the player', gale > 50, `${gale.toFixed(1)}px`);
+  // Riptide is Gale with the sign flipped: `damageEnemy` pushes along the
+  // vector away from the hit, so a negative knock drags the body toward it.
+  check('Riptide drags them the other way', riptide < -50, `${riptide.toFixed(1)}px`);
+}
+
+// ---------------------------------------------------------------------------
+console.log('\na stone stops one shot and is spent doing it');
+{
+  const { fireShot, HOSTILE } = await import('../src/shots.js');
+  const { updateShots } = await import('../src/shots.js');
+  const { compile } = await import('../src/spell.js');
+
+  const shot = () => ({ speed: 200, dmg: 10, r: 9, life: 9, tint: HOSTILE.mid });
+
+  const eff = compile({ focus: 'projectile', children: [{ id: 'solidDefense', level: 3, children: [] }] }, CAPS)
+    .triggers[0].spell;
+  check('Solid Defense is flagged as a blocker', !!eff.flags.blocks);
+
+  const run = (shots) => {
+    createWorld({ crowd: 0, atSeconds: 120 });
+    G.player.x = 0; G.player.y = 0;
+    const hp0 = G.player.hp;
+    castSpell(eff, 0, 0, 0);
+    const stones = G.spellEntities.active.filter((e) => e.alive);
+    // Spacing and window both kept well inside the stones' 5.5s lifetime. An
+    // earlier version ran six seconds and watched them EXPIRE, which reads
+    // exactly like three stones spent on one shot.
+    for (let i = 0; i < shots; i++) fireShot(300 + i * 90, 0, Math.PI, shot(), true);
+    for (let i = 0; i < 60 * 4; i++) {
+      G.grid.clear();
+      for (const q of G.enemies.active) if (q.alive) G.grid.insert(q);
+      updateSpellEntities(STEP);
+      updateShots(STEP);
+      G.shots.sweep((q) => { q.s.visible = false; q.glow.visible = false; });
+    }
+    return { out: stones.length, left: stones.filter((e) => e.alive).length, hurt: hp0 - G.player.hp };
+  };
+
+  // One stone per shot -- three stones really do stop three shots, which an
+  // earlier version of this test got wrong by firing two and expecting one to
+  // be spent.
+  const one = run(1);
+  check('one shot spends exactly one stone', one.out - one.left === 1, `${one.out} -> ${one.left}`);
+  check('and the player is untouched', one.hurt === 0, `took ${Math.round(one.hurt)}`);
+
+  // Under sustained fire more stones go, and shots start getting through.
+  //
+  // NOT all of them: the stones ORBIT, so a shield made of three moving bodies
+  // is a probabilistic one and fire can slip between them. That is the real
+  // behaviour, and an earlier version of this test asserted a wall instead.
+  const over = run(4);
+  check('heavier fire spends more stones', over.out - over.left > one.out - one.left,
+    `${over.out} -> ${over.left} under four shots`);
+  check('and some of it gets through', over.hurt > 0, `took ${Math.round(over.hurt)} damage`);
 }
 
 console.log(failures ? `\n${failures} failing` : '\nall force checks pass');

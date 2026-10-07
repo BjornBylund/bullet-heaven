@@ -109,6 +109,17 @@ export const CFG = {
   // putting stat cards on the upgrade screen.
   levelGrowth: { maxHp: 7, dmg: 0.055, crit: 0.004 },
 
+  // Burn damage per stack per tick, before the rune's own `magFrac`.
+  //
+  // Keyed to the player's LEVEL rather than to the spell that lit the fire, so
+  // a Burn rune is worth the same wherever it is socketed -- it used to be a
+  // percentage of the host spell's damage, which made it worth almost nothing
+  // under a trigger whose damage was already a fraction of a fraction.
+  //
+  // At level 1 a stack ticks for 3; by level 30 for 17.5, twice a second, and
+  // burn stacks to 10.
+  burn: { base: 3, perLevel: 0.5 },
+
   spell: {
     // How many PLACED persistent fields one compiled node may have alive at
     // once. Orbiting fields do not use this -- they refresh instead of

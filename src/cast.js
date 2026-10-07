@@ -354,8 +354,10 @@ function dealDamage(ent, target) {
   // Only debuff-keyed conditionals remain, so a damage bonus always traces back
   // to a status the player chose to apply.
   let mul = ps.dmg * damageTakenMul(target);
-  if (f.vsFrozen && target.frozen > 0) mul *= 1 + f.vsFrozen;
   if (f.vsChilled && target.st[CHILL] > 0) mul *= 1 + f.vsChilled;
+  // Scales with the STACK COUNT rather than being a flat bonus for any chill
+  // at all, which is what makes stacking it worth doing.
+  if (f.vsChillStack) mul *= 1 + f.vsChillStack * target.st[CHILL];
 
   const crit = Math.random() < critChance;
   const amount = ent.dmg * mul * (crit ? 2 : 1);
@@ -370,7 +372,9 @@ function dealDamage(ent, target) {
 
   for (let i = 0; i < c.statuses.length; i++) {
     const st = c.statuses[i];
-    applyStatus(target, st.idx, st.stacks, st.mag || 0);
+    // `magFrac` rather than a resolved number: burn damage comes from the
+    // player's level, which is only known when the status actually lands.
+    applyStatus(target, st.idx, st.stacks, st.magFrac || 0);
   }
 
   fireTriggers(ent, c, 'hit', target.x, target.y, ent.angle);
@@ -420,6 +424,30 @@ function nearestTo(x, y, radius, reject) {
 // update
 // ---------------------------------------------------------------------------
 
+/**
+ * A stone stops one enemy shot and is spent doing it.
+ *
+ * Checked against the shot pool directly rather than through the spatial hash,
+ * because the hash holds enemies and only a handful of entities ever block --
+ * three orbiting stones and a boulder, against at most a few hundred shots.
+ *
+ * It is deliberately ONE shot. A stone that soaks everything is a wall, and
+ * the interesting version of this is a resource the player watches get used
+ * up: four stones out, four shots stopped, and then you are exposed again.
+ */
+function blockShot(ent) {
+  for (const q of G.shots.active) {
+    if (!q.alive) continue;
+    const dx = q.x - ent.x, dy = q.y - ent.y;
+    const rr = ent.radius + q.r;
+    if (dx * dx + dy * dy > rr * rr) continue;
+    q.alive = false;
+    ent.alive = false;
+    burst(ent.x, ent.y, ent.c.def.color, 12, 200, 0.55);
+    return;
+  }
+}
+
 export function updateSpellEntities(dt) {
   const near = G.scratch;
   const p = G.player;
@@ -428,6 +456,7 @@ export function updateSpellEntities(dt) {
     if (ent.kind === 'projectile') updateProjectile(ent, dt, near);
     else if (ent.kind === 'burst') updateBurst(ent, dt, near);
     else updateField(ent, dt, near, p);
+    if (ent.alive && ent.c.flags.blocks) blockShot(ent);
     if (!ent.alive) continue;
 
     const vis = !offscreen(ent.x, ent.y, ent.radius + 40);
