@@ -837,26 +837,42 @@ function windCanvas(size = 92) {
 }
 
 /** Vortex: a drawn-in spiral, for the tornado. */
+/**
+ * The tornado, drawn as little as it can be and still read.
+ *
+ * This is the one effect in the game that is routinely on screen six times at
+ * once, centred on the player, at 345px across. The first version used three
+ * arms wrapping one and a half turns, with a wide soft stroke under a bright
+ * thin one -- handsome alone, and a solid mesh of light once a crowd started
+ * dying. The player could not find their own sprite in it.
+ *
+ * So: TWO arms, one turn, one thin stroke, and a faint ring at the rim. The
+ * ring is the useful part -- it marks exactly where the pull stops, which is
+ * the sprite's own edge, so the thing you can see is the thing that acts on
+ * you.
+ */
 function vortexCanvas(size = 176) {
   const [c, g] = cvs(size, size);
   const cx = size / 2, cy = size / 2, r = size / 2 - 4;
-  for (let arm = 0; arm < 3; arm++) {
+
+  g.beginPath();
+  g.arc(cx, cy, r * 0.96, 0, TAU);
+  g.lineWidth = 1.4;
+  g.strokeStyle = 'rgba(255,255,255,0.22)';
+  g.stroke();
+
+  for (let arm = 0; arm < 2; arm++) {
     g.beginPath();
-    const off = (arm / 3) * TAU;
+    const off = (arm / 2) * TAU;
     for (let t = 0; t <= 1; t += 0.02) {
-      const a = off + t * TAU * 1.5;
-      const rad = r * (0.14 + t * 0.86);
+      const a = off + t * TAU;
+      const rad = r * (0.20 + t * 0.76);
       const x = cx + Math.cos(a) * rad, y = cy + Math.sin(a) * rad;
       t === 0 ? g.moveTo(x, y) : g.lineTo(x, y);
     }
-    // kept deliberately thin and dim: several tornados overlap in practice, and
-    // at full brightness they whited out the whole screen
-    g.lineWidth = 5;
+    g.lineWidth = 2.0;
     g.lineCap = 'round';
-    g.strokeStyle = 'rgba(255,255,255,0.28)';
-    g.stroke();
-    g.lineWidth = 1.8;
-    g.strokeStyle = 'rgba(255,255,255,0.62)';
+    g.strokeStyle = 'rgba(255,255,255,0.42)';
     g.stroke();
   }
   return c;

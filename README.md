@@ -663,6 +663,17 @@ seconds. Holding a pack in place and then removing its ability to leave are the
 same effect bought twice, on a rune that was already the strongest in the game.
 The Chill came off when the pull was repaired.
 
+**The tornado is drawn as little as it can be and still read.** It is the one
+effect routinely on screen six times at once, centred on the player, at 345px
+across — and it used three arms wrapping one and a half turns with a wide soft
+stroke under a bright thin one, blended additively. Handsome alone; a solid
+mesh of light once a crowd started dying, with the player unable to find their
+own sprite in it. It is now two arms, one turn, one thin stroke, a faint ring
+at the rim, and **normal blending rather than additive** — so two tornados on
+top of each other look like one instead of twice as bright. The rim ring is the
+useful part: it marks exactly where the pull stops, which is the sprite's own
+edge.
+
 **The pull now reaches exactly as far as the sprite is drawn.** It used to
 reach `radius * 2` while the sprite was drawn `radius * 2.3` across — so it
 dragged bodies from 1.8x the visible edge, and foes plainly outside the tornado

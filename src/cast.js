@@ -55,7 +55,12 @@ const LOOKS = {
   blade:     { tex: 'blade',     aspect: 1,   spin: 5.0, blend: 'normal', alpha: 1 },
   wind:      { tex: 'wind',      aspect: 1,   spin: 6.0, blend: 'add',    alpha: 0.85 },
   // a persistent, screen-filling field: dim, or overlapping ones white out
-  vortex:    { tex: 'vortex',    aspect: 1,   spin: 4.5, blend: 'add',    alpha: 0.42 },
+  // NOT additive, unlike everything else here. Perfect Storm is an on-kill
+  // trigger, so in a crowd six of these overlap at 345px across -- and with
+  // `add` each overlap brightened the next until the middle of the screen,
+  // where the player is standing, was a solid mesh of spirals. Normal blending
+  // means two tornados on top of each other look like one.
+  vortex:    { tex: 'vortex',    aspect: 1,   spin: 1.6, blend: 'normal', alpha: 0.30 },
   shatter:   { tex: 'shatter',   aspect: 1,   spin: 2.5, blend: 'add',    alpha: 1 },
   shock:     { tex: 'ring', from: 'tex', aspect: 1, spin: 0,   blend: 'add', alpha: 1 },
   cone:      { tex: 'arc',  from: 'tex', aspect: 1, spin: 0,   blend: 'add', alpha: 1 },
