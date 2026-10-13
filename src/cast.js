@@ -653,11 +653,49 @@ function updateField(ent, dt, near, p) {
     }
   }
 
+  // A MOVING body damages on contact; a stationary one damages on a tick.
+  //
+  // The tick is an instant, not a sweep: it asks "who is inside me right now"
+  // and ignores everything the body passed through on the way. That is correct
+  // for a field sitting on the ground, where anything inside it stays inside
+  // it between ticks -- and badly wrong for an orbiting one, which moves.
+  //
+  // Measured: a Self-Centered body advances 60 degrees of its circle between
+  // ticks while covering only 28, so more than half the ring was never touched
+  // at a tick instant. Bodies visibly swept through enemies and dealt nothing,
+  // and the damage an enemy took depended on where in the orbit the tick
+  // happened to land -- 60 to 120 across a ring that should have taken the
+  // same from each pass.
+  //
+  // So an orbiting body hits on contact and remembers who it has hit, with the
+  // memory cleared every tick interval. The RATE is unchanged -- still at most
+  // one hit per enemy per tick -- but it no longer depends on the geometry
+  // lining up.
+  if (f.orbit) {
+    ent.tickT -= dt;
+    if (ent.tickT <= 0) {
+      ent.tickT = c.stats.tick;
+      ent.hitCount = 0;                 // everything may be struck again
+    }
+    G.grid.query(ent.x, ent.y, ent.radius + 20, near);
+    for (let i = 0; i < near.length; i++) {
+      const t = near[i];
+      if (!t.alive) continue;
+      const dx = t.x - ent.x, dy = t.y - ent.y;
+      const rr = ent.radius + t.r;
+      if (dx * dx + dy * dy > rr * rr) continue;
+      if (!claim(ent, t)) continue;
+      dealDamage(ent, t);
+    }
+    return;
+  }
+
   ent.tickT -= dt;
   if (ent.tickT > 0) return;
   ent.tickT = c.stats.tick;
 
-  // The tick interval is the rate limit, so no per-enemy dedup is needed.
+  // Stationary: the tick interval is the rate limit, and nothing moves between
+  // ticks, so no per-enemy dedup is needed.
   G.grid.query(ent.x, ent.y, ent.radius + 20, near);
   for (let i = 0; i < near.length; i++) {
     const t = near[i];

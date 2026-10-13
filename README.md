@@ -620,6 +620,22 @@ level-up, editor or game-over screen was up. Decay now runs from the frame loop
 on real time, which is also more correct: shake is perceived in wall-clock time,
 not simulation steps.
 
+**An orbiting body missed most of what it swept through.** A field damages on
+a TICK, which asks "who is inside me right now" and ignores everything the body
+passed on the way. That is correct for a field sitting on the ground, where
+anything inside it stays inside it between ticks — and wrong for one that
+moves. Measured: a Self-Centered body advances **60° of its circle between
+ticks while covering only 28°**, so more than half the ring was never touched
+at a tick instant. Bodies visibly swept through enemies and dealt nothing, and
+what an enemy took depended on where in the orbit the tick happened to land —
+60 to 120 across a ring that should have been even.
+
+Orbiting bodies now damage on CONTACT and remember who they have hit, with the
+memory cleared every tick interval. The rate is unchanged — still at most one
+hit per enemy per tick — but it no longer depends on the geometry lining up.
+The same ring now takes 240 to 320, which is roughly **2.3x the damage orbit
+builds were actually landing** before.
+
 **Making a Field orbit collapsed its size.** An orbiting field takes its radius
 from `baseSize`, which is only ever set by a *trigger* effect (Solid Defense's
 stones, Flash of Swords' blades). A player's own Field has no `baseSize`, so it
