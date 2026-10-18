@@ -7,7 +7,7 @@
 //
 // Usage (served page, console):
 //   await __runeBench()
-//   await __runeBench({ focus: 'burst', seconds: 6 })
+//   await __runeBench({ focus: 'spiral', seconds: 6 })
 //
 // THREE MEASUREMENTS, because no single one of them is honest on its own:
 //
