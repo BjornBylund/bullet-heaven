@@ -267,13 +267,17 @@ const FIELD_REACH = FIELD_SPRITE_SCALE / 2;
  * drops. Long-range builds get several castings strung out along the flight
  * path instead of one at an arbitrary waypoint.
  *
+ * The interval is set by how far a bolt has to go to EARN the second one.
+ * At 160 a Projectile banked three inside its 620 range and they came out
+ * close enough together to read as a stream rather than as waypoints.
+ *
  * Each kind still contributes the only units it has -- a projectile its
  * travel, a burst how far its edge has swept, a field how far it has drifted.
  * An ANCHORED field contributes nothing, because it does not go anywhere, and
  * that is the honest answer rather than the old one where elapsed life was
  * quietly dressed up as distance.
  */
-const DISTANCE_EVERY = 160;
+const DISTANCE_EVERY = 220;
 
 /** Bound on firings per frame, so one huge step cannot spawn a pile at once. */
 const DISTANCE_MAX_PER_FRAME = 4;
