@@ -38,19 +38,33 @@ import { burst } from './fx.js';
 /**
  * How each named look is drawn.
  *
- * `aspect > 1` means the sprite is elongated and points along its heading (a
- * bolt, a flame, a lightning arc). `aspect === 1` means it is round-ish and
- * TUMBLES instead -- a boulder or ice shard that stayed axis-aligned would read
- * as a sprite rather than a thing moving through the world.
+ * Two separate questions, which used to be one.
+ *
+ * `aspect` is the shape of the sprite BOX: above 1 it is stretched along its
+ * own x and drawn as a streak (a bolt, a flame, a lightning arc); at 1 it is
+ * square.
+ *
+ * Orientation is decided on its own. A look with `face` points along its
+ * heading, and `face` is how far its ART has to turn to get there -- 0 when
+ * the shape is drawn pointing right, PI/2 when it is drawn pointing up.
+ * Anything else TUMBLES at `spin`, because a boulder that stayed axis-aligned
+ * would read as a sprite rather than a thing moving through the world.
+ *
+ * Those two were tied together before -- stretched sprites faced, square ones
+ * tumbled -- which was wrong for anything long drawn inside a square canvas.
+ * The ice splinter is exactly that: a pointed crystal, as directional as a
+ * bolt, that spun like a snowflake because its bounding box happened to be
+ * square.
  *
  * `from: 'tex'` pulls the shared shapes (ring, arc, glow) rather than the
  * dedicated spell art.
  */
 const LOOKS = {
-  bolt:      { tex: 'bolt',      aspect: 3.2, spin: 0,   blend: 'add',    alpha: 1 },
-  flame:     { tex: 'flame',     aspect: 1.5, spin: 0,   blend: 'add',    alpha: 1 },
-  lightning: { tex: 'lightning', aspect: 2.1, spin: 0,   blend: 'add',    alpha: 1 },
-  ice:       { tex: 'ice',       aspect: 1,   spin: 7.0, blend: 'normal', alpha: 1 },
+  bolt:      { tex: 'bolt',      aspect: 3.2, face: 0, blend: 'add',    alpha: 1 },
+  flame:     { tex: 'flame',     aspect: 1.5, face: 0, blend: 'add',    alpha: 1 },
+  lightning: { tex: 'lightning', aspect: 2.1, face: 0, blend: 'add',    alpha: 1 },
+  // drawn tip-up in its canvas, so it needs the quarter turn to fly point-first
+  ice:       { tex: 'ice',  aspect: 1, face: Math.PI / 2, blend: 'normal', alpha: 1 },
   stone:     { tex: 'stone',     aspect: 1,   spin: 1.8, blend: 'normal', alpha: 1 },
   blade:     { tex: 'blade',     aspect: 1,   spin: 5.0, blend: 'normal', alpha: 1 },
   wind:      { tex: 'wind',      aspect: 1,   spin: 6.0, blend: 'add',    alpha: 0.85 },
@@ -62,12 +76,30 @@ const LOOKS = {
   // means two tornados on top of each other look like one.
   vortex:    { tex: 'vortex',    aspect: 1,   spin: 1.6, blend: 'normal', alpha: 0.30 },
   shatter:   { tex: 'shatter',   aspect: 1,   spin: 2.5, blend: 'add',    alpha: 1 },
+  // Broken ground: a dim ring on the floor, nothing more.
+  //
+  // `under` puts it beneath the crowd, because a debuff field is something
+  // you want to SEE enemies standing in and drawing it over them hid its own
+  // point. It started on the shatter art, which was worse than it sounds --
+  // a radial burst of spikes reads as an explosion going off, and eighteen of
+  // them at once (three sockets x a cap of six) turned the floor into a field
+  // of white starbursts. A plain outline marks the same area and disappears
+  // the moment you are not looking for it.
+  rubble:    { tex: 'ring', from: 'tex', aspect: 1, spin: 0, blend: 'normal', alpha: 0.20, under: true },
   shock:     { tex: 'ring', from: 'tex', aspect: 1, spin: 0,   blend: 'add', alpha: 1 },
   cone:      { tex: 'arc',  from: 'tex', aspect: 1, spin: 0,   blend: 'add', alpha: 1 },
   aura:      { tex: 'glow', from: 'tex', aspect: 1, spin: 0.6, blend: 'add', alpha: 0.24 },
 };
 
 const lookTexture = (lk) => (lk.from === 'tex' ? G.tex[lk.tex] : G.tex.spell[lk.tex]);
+
+/**
+ * How far the launch bearing advances between casts of a spiralling spell.
+ *
+ * Deliberately not a divisor of TAU: at 0.7rad successive bolts never land on
+ * the same spoke, so the arms drift instead of locking into a fixed star.
+ */
+const SPIRAL_STEP = 0.7;
 
 let nextEid = 1;
 
@@ -92,7 +124,13 @@ export function initCasting() {
       // again; resetting is just hitCount = 0.
       hitIds: new Int32Array(32), hitCount: 0,
       tickT: 0, trigFired: 0,
-      orbitIndex: 0, orbitCount: 1, spin: 0,
+      // A spiral is integrated in POLAR coordinates about the point it was
+      // cast from, so it carries that origin and its current radius rather
+      // than relying on a velocity that would only ever trace a circle.
+      ox: 0, oy: 0, spiralR: 0,
+      // Which copy of its spell this is. Only the shimmer uses it now, to
+      // keep stacked field patches from pulsing in unison.
+      copyIndex: 0,
     };
   }, 420);
 }
@@ -119,10 +157,20 @@ export function castSpell(c, x, y, inAngle) {
     if (t) angle = Math.atan2(t.y - y, t.x - x);
   }
 
+  // A spiral does not AIM, it sweeps -- so it ignores the target it just
+  // acquired and leaves on the next bearing around the circle instead. Firing
+  // every cast at the nearest body made every bolt retrace one arc; stepping
+  // the bearing is what turns a stream of arcs into arms winding out of the
+  // caster.
+  if (f.spiral) {
+    c.spiralPhase = ((c.spiralPhase || 0) + SPIRAL_STEP) % TAU;
+    angle = c.spiralPhase;
+  }
+
   // Orbiting bodies are placed by the field emitter whatever focus made them:
   // it is the only path that assigns each body its slot on the circle and
   // refreshes the set instead of restacking it.
-  if (c.focusId === 'field' || f.orbit) {
+  if (c.focusId === 'field') {
     emitField(c, x, y, angle, copies);
   } else {
     for (let i = 0; i < copies; i++) {
@@ -139,7 +187,7 @@ export function castSpell(c, x, y, inAngle) {
         const spread = f.cone || 0.44;
         a = angle + (i - (copies - 1) / 2) * (spread * 2 / copies);
       }
-      spawn(c, x + ox, y + oy, a, 0, 1);
+      spawn(c, x + ox, y + oy, a, i);
     }
   }
 
@@ -163,30 +211,11 @@ function liveOf(c) {
  * fifty times stronger than anything else in the table, and the effect scaled
  * with fire rate, so speeding a Focus up silently buffed them again.
  *
- * Two shapes, two rules:
- *
- *   ORBIT   refreshes. "Four blades circle you" is the intended fantasy, not
- *           "blades accumulate". Recasting renews their life and tops up to the
- *           current count, so more Split still means more blades.
- *
- *   PLACED  capped. These are dropped at a position and cannot be refreshed in
- *           place, so they get a hard ceiling instead.
+ * Fields are dropped at a position and cannot be refreshed in place, so they
+ * get a hard ceiling instead.
  */
 function emitField(c, x, y, angle, copies) {
   const want = Math.max(1, copies);
-
-  if (c.flags.orbit) {
-    let found = 0;
-    for (const e of G.spellEntities.active) {
-      if (e.c !== c) continue;
-      e.life = c.stats.life;          // renew, but keep age so it does not jump
-      e.orbitIndex = found++;
-      e.orbitCount = want;
-    }
-    // top up only; the loop above cannot see entities spawned below it
-    for (let i = found; i < want; i++) spawn(c, x, y, angle, i, want);
-    return;
-  }
 
   // A descriptor may raise its own ceiling; the trail is the one that does.
   const cap = c.cap || CFG.spell.fieldCap;
@@ -209,12 +238,8 @@ function emitField(c, x, y, angle, copies) {
     }
   }
 
-  for (let i = 0; i < want && live < cap; i++, live++) spawn(c, x, y, angle, i, want);
+  for (let i = 0; i < want && live < cap; i++, live++) spawn(c, x, y, angle, i);
 }
-
-// How much of its own radius a Field keeps when it is made to orbit. Several
-// smaller patches that sweep the field, rather than one big stationary one.
-const ORBIT_FIELD_SCALE = 0.45;
 
 /**
  * How many times its radius a field's sprite is drawn across.
@@ -248,15 +273,13 @@ function checkDistance(ent, c, progress) {
   fireTriggers(ent, c, 'distance', ent.x, ent.y, ent.angle);
 }
 
-function spawn(c, x, y, angle, orbitIndex, orbitCount) {
+function spawn(c, x, y, angle, copyIndex) {
   const e = G.spellEntities.spawn();
   const st = c.stats;
   const f = c.flags;
   const range = st.range * G.player.stats.area;
 
-  // An orbiting spell runs on the field update path regardless of its focus --
-  // circling the player is what a field already knows how to do.
-  e.kind = f.orbit ? 'field' : c.focusId;
+  e.kind = c.focusId;
   e.c = c;
   e.eid = nextEid++;
   e.x = x; e.y = y;
@@ -270,8 +293,7 @@ function spawn(c, x, y, angle, orbitIndex, orbitCount) {
   e.trailAcc = 0;
   e.age = 0;
   e.travelled = 0;
-  e.orbitIndex = orbitIndex;
-  e.orbitCount = orbitCount;
+  e.copyIndex = copyIndex;
 
   const s = e.s;
   s.tint = c.def.color;
@@ -281,6 +303,10 @@ function spawn(c, x, y, angle, orbitIndex, orbitCount) {
   // a Cone modifier reshapes a Burst, so it overrides the compiled look
   const lk = LOOKS[e.kind === 'burst' && f.cone ? 'cone' : c.look] || LOOKS.bolt;
   e.look = lk;
+  // Pooled sprites keep whatever layer they were last used on, so this has to
+  // move them BACK as well as down.
+  const layer = lk.under ? G.layers.decals : G.layers.proj;
+  if (s.parent !== layer) layer.addChild(s);
   s.texture = lookTexture(lk);
   s.blendMode = lk.blend;
   s.alpha = lk.alpha;
@@ -291,31 +317,21 @@ function spawn(c, x, y, angle, orbitIndex, orbitCount) {
     e.radius = e.baseRadius;
     e.vx = Math.cos(angle) * st.speed;
     e.vy = Math.sin(angle) * st.speed;
+    e.ox = x; e.oy = y; e.spiralR = 0;
   } else if (e.kind === 'burst') {
     e.range = range * f.size;
     e.radius = 0;
     e.prevRadius = 0;
     e.life = st.expand;
   } else {
-    // An orbiting field is deliberately smaller than the single stationary one
-    // it replaces, but it must still be sized FROM THE SPELL. `baseSize` is only
-    // ever set by a trigger effect (Solid Defense's stones, Flash of Swords'
-    // blades), so a player's own Field reaching this branch had no baseSize and
-    // fell through to a hardcoded 30 -- collapsing a radius-100 field to 30 the
-    // moment Self-Centered was socketed, and leaving size runes scaling 30
-    // instead of 100. Reported as "size adjustment isn't working".
-    // `orbitSize` is set by the compiler only for spells that were NOT born
-    // fields, and is the one number that keeps a converted projectile from
-    // becoming a 200px blob: its `range` is a travel distance.
-    e.range = st.orbitSize !== undefined
-      ? st.orbitSize * f.size
-      : (f.orbit ? (f.baseSize || range * ORBIT_FIELD_SCALE) * f.size
-                 : range * f.size);
+    // Sized FROM THE SPELL rather than from a constant: a hardcoded fallback
+    // here once collapsed a radius-100 field to 30 and left size runes scaling
+    // the 30. Reported at the time as "size adjustment isn't working".
+    e.range = range * f.size;
     e.baseRadius = e.range;
     e.radius = e.range;
     e.life = st.life;
     e.tickT = 0;
-    e.spin = 2.1;
     s.rotation = 0;
   }
 
@@ -434,25 +450,12 @@ function nearestTo(x, y, radius, reject) {
  *
  * Checked against the shot pool directly rather than through the spatial hash,
  * because the hash holds enemies and only a handful of entities ever block --
- * three orbiting stones and a boulder, against at most a few hundred shots.
+ * three planted stones, against at most a few hundred shots.
  *
  * It is deliberately ONE shot. A stone that soaks everything is a wall, and
  * the interesting version of this is a resource the player watches get used
  * up: four stones out, four shots stopped, and then you are exposed again.
  */
-function blockShot(ent) {
-  for (const q of G.shots.active) {
-    if (!q.alive) continue;
-    const dx = q.x - ent.x, dy = q.y - ent.y;
-    const rr = ent.radius + q.r;
-    if (dx * dx + dy * dy > rr * rr) continue;
-    q.alive = false;
-    ent.alive = false;
-    burst(ent.x, ent.y, ent.c.def.color, 12, 200, 0.55);
-    return;
-  }
-}
-
 export function updateSpellEntities(dt) {
   const near = G.scratch;
   const p = G.player;
@@ -461,7 +464,6 @@ export function updateSpellEntities(dt) {
     if (ent.kind === 'projectile') updateProjectile(ent, dt, near);
     else if (ent.kind === 'burst') updateBurst(ent, dt, near);
     else updateField(ent, dt, near, p);
-    if (ent.alive && ent.c.flags.blocks) blockShot(ent);
     if (!ent.alive) continue;
 
     const vis = !offscreen(ent.x, ent.y, ent.radius + 40);
@@ -477,8 +479,33 @@ function updateProjectile(ent, dt, near) {
   const f = c.flags;
   const sp = c.stats.speed;
 
-  if (f.spiral) {
+  // A SPIRAL, not a circle.
+  //
+  // This used to be `ent.angle += spiral * dt` with the usual straight-line
+  // integration underneath, which is a constant turn rate against a constant
+  // speed -- and that is a circle of radius speed/spiral, centred on a point
+  // off to one side of wherever the bolt was cast. The stream looked like it
+  // curled around the player only because the next bolt left before the last
+  // one came back round. Nothing was ever centred on anything.
+  //
+  // So it is integrated in polar coordinates about the cast point instead:
+  // the radius grows at the spell's speed while the bearing sweeps, which is
+  // an Archimedean spiral anchored where it was fired. `range` is therefore
+  // literal reach -- how far from you the arm actually gets -- and `speed` is
+  // how fast it opens out, both of which now mean what they say on the card.
+  //
+  // Velocity is read back off the step rather than driving it, because the
+  // sprite's facing, knockback direction and the trail all want the tangent.
+  const spiralling = f.spiral && !ent.returning;
+  if (spiralling) {
+    ent.spiralR += sp * dt;
     ent.angle += f.spiral * dt;
+    const nx = ent.ox + Math.cos(ent.angle) * ent.spiralR;
+    const ny = ent.oy + Math.sin(ent.angle) * ent.spiralR;
+    ent.vx = (nx - ent.x) / dt;
+    ent.vy = (ny - ent.y) / dt;
+    ent.x = nx;
+    ent.y = ny;
   } else if (f.homing > 0) {
     // Skip anything this projectile has ALREADY hit. Hit dedup means it can
     // never damage the same enemy twice, so without this filter a homing shot
@@ -493,7 +520,7 @@ function updateProjectile(ent, dt, near) {
       ent.angle += Math.max(-f.homing * dt, Math.min(f.homing * dt, d));
     }
   }
-  if (f.spiral || f.homing > 0) {
+  if (!spiralling && f.homing > 0) {
     ent.vx = Math.cos(ent.angle) * sp;
     ent.vy = Math.sin(ent.angle) * sp;
   }
@@ -507,8 +534,12 @@ function updateProjectile(ent, dt, near) {
     if (hx * hx + hy * hy < 420) { ent.alive = false; return; }
   }
 
-  ent.x += ent.vx * dt;
-  ent.y += ent.vy * dt;
+  if (!spiralling) {
+    ent.x += ent.vx * dt;
+    ent.y += ent.vy * dt;
+  }
+  // Either way this is distance from the origin for a spiral and distance
+  // flown for everything else, which is what `range` is compared against.
   ent.travelled += sp * dt;
 
   // drip anchored patches behind it at a fixed spacing, so trail density does
@@ -526,14 +557,19 @@ function updateProjectile(ent, dt, near) {
 
   const s = ent.s;
   const lk = ent.look;
+  if (lk.face !== undefined) {
+    // For a spiral the heading is the tangent, which is not the polar bearing
+    // -- taking `ent.angle` here would point every shard at the origin.
+    const h = spiralling ? Math.atan2(ent.vy, ent.vx) : ent.angle;
+    s.rotation = h + lk.face;
+  }
+  else s.rotation += lk.spin * dt;
   if (lk.aspect > 1) {
-    s.rotation = ent.angle;
     // proportional to radius, so a size-boosted bolt stays bolt-shaped instead
     // of creeping toward square
     s.width = Math.max(24, ent.radius * 2 * lk.aspect);
     s.height = ent.radius * 2;
   } else {
-    s.rotation += lk.spin * dt;
     s.width = s.height = ent.radius * 2.5;
   }
 
@@ -573,6 +609,7 @@ function updateBurst(ent, dt, near) {
   s.width = s.height = ent.radius * 2;
   s.alpha = ent.look.alpha * 0.85 * (1 - ent.age / c.stats.expand);
   if (f.cone) s.rotation = ent.angle;
+  else if (ent.look.face !== undefined) s.rotation = ent.angle + ent.look.face;
   else s.rotation += ent.look.spin * dt;
 
   G.grid.query(ent.x, ent.y, ent.radius + 30, near);
@@ -605,16 +642,7 @@ function updateField(ent, dt, near, p) {
 
   checkDistance(ent, c, ent.age / Math.max(0.01, c.stats.life));
 
-  if (f.orbit) {
-    const a = ent.age * ent.spin + (ent.orbitIndex / ent.orbitCount) * TAU;
-    // Distance from the player, which is NOT the body's own radius. For a field
-    // the two coincide and `orbitDist` is just its range; for anything else the
-    // compiler supplies a real orbit radius.
-    const r = (c.stats.orbitDist !== undefined ? c.stats.orbitDist : c.stats.range)
-            * G.player.stats.area;
-    ent.x = p.x + Math.cos(a) * r;
-    ent.y = p.y + Math.sin(a) * r;
-  } else if (!f.anchor) {
+  if (!f.anchor) {
     ent.x = p.x;
     ent.y = p.y;
   }
@@ -626,11 +654,11 @@ function updateField(ent, dt, near, p) {
 
   const s = ent.s;
   s.width = s.height = ent.radius * FIELD_SPRITE_SCALE;
-  s.rotation += ent.look.spin * dt;
+  if (ent.look.face === undefined) s.rotation += ent.look.spin * dt;
   // Each look states its own weight, but a descriptor may override it -- the
   // trail lays flame sprites dozens deep and needs far less than flame's own.
   const base = c.alpha || ent.look.alpha;
-  s.alpha = base < 0.6 ? base + Math.sin(G.t * 5 + ent.orbitIndex) * 0.05 : base;
+  s.alpha = base < 0.6 ? base + Math.sin(G.t * 5 + ent.copyIndex) * 0.05 : base;
 
   // A tornado drags the swarm inward, which is what makes it feel different
   // from a field that merely sits there.
@@ -653,49 +681,13 @@ function updateField(ent, dt, near, p) {
     }
   }
 
-  // A MOVING body damages on contact; a stationary one damages on a tick.
-  //
-  // The tick is an instant, not a sweep: it asks "who is inside me right now"
-  // and ignores everything the body passed through on the way. That is correct
-  // for a field sitting on the ground, where anything inside it stays inside
-  // it between ticks -- and badly wrong for an orbiting one, which moves.
-  //
-  // Measured: a Self-Centered body advances 60 degrees of its circle between
-  // ticks while covering only 28, so more than half the ring was never touched
-  // at a tick instant. Bodies visibly swept through enemies and dealt nothing,
-  // and the damage an enemy took depended on where in the orbit the tick
-  // happened to land -- 60 to 120 across a ring that should have taken the
-  // same from each pass.
-  //
-  // So an orbiting body hits on contact and remembers who it has hit, with the
-  // memory cleared every tick interval. The RATE is unchanged -- still at most
-  // one hit per enemy per tick -- but it no longer depends on the geometry
-  // lining up.
-  if (f.orbit) {
-    ent.tickT -= dt;
-    if (ent.tickT <= 0) {
-      ent.tickT = c.stats.tick;
-      ent.hitCount = 0;                 // everything may be struck again
-    }
-    G.grid.query(ent.x, ent.y, ent.radius + 20, near);
-    for (let i = 0; i < near.length; i++) {
-      const t = near[i];
-      if (!t.alive) continue;
-      const dx = t.x - ent.x, dy = t.y - ent.y;
-      const rr = ent.radius + t.r;
-      if (dx * dx + dy * dy > rr * rr) continue;
-      if (!claim(ent, t)) continue;
-      dealDamage(ent, t);
-    }
-    return;
-  }
-
   ent.tickT -= dt;
   if (ent.tickT > 0) return;
   ent.tickT = c.stats.tick;
 
-  // Stationary: the tick interval is the rate limit, and nothing moves between
-  // ticks, so no per-enemy dedup is needed.
+  // The tick interval is the rate limit. A field does not move between ticks,
+  // so anything inside it at one tick was inside it for the whole interval and
+  // no per-enemy dedup is needed.
   G.grid.query(ent.x, ent.y, ent.radius + 20, near);
   for (let i = 0; i < near.length; i++) {
     const t = near[i];

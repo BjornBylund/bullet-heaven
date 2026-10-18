@@ -22,8 +22,6 @@
 
 // Read by every kind: set in castSpell/spawn, or applied in dealDamage.
 const SHARED = [
-  // Read by updateSpellEntities for every kind, not by one update function.
-  'flags.blocks',
   'stats.dmg', 'stats.cooldown', 'stats.range',
   'flags.size', 'flags.split', 'flags.crit', 'flags.critVsBurn',
   'flags.vsChilled', 'flags.vsChillStack', 'flags.knock', 'flags.baseSize',
@@ -53,7 +51,6 @@ export const CONSUMES = {
     ...SHARED,
     'stats.life',
     'stats.tick',
-    'flags.orbit',
     'flags.anchor',
     'flags.pull',
     'flags.grow',
@@ -165,16 +162,18 @@ export const CLAIMS = {
  * is a decision that a rune may charge attunement and do nothing.
  */
 export const EXPECT = {
-  // Spiraling Rage sets `spiral`, and updateProjectile reads
-  // `if (f.spiral) ... else if (f.homing)`. Spiral wins outright, so homing on
-  // a spiralling bolt is dead by construction. Worth knowing when reading the
-  // rune table: these two runes do not combine.
+  // `updateProjectile` reads `if (f.spiral) ... else if (f.homing)`, so spiral
+  // wins outright and homing on a spiralling bolt is dead by construction.
+  // True of Spiraling Rage, and now of the whole Spiral focus -- worth knowing
+  // when reading the rune table: homing is not a Spiral rune.
   'messengerOfPeace>spiralingRage': false,
+  'messengerOfPeace@spiral': false,
 
-  // Both triggers already apply Burn (2 and 3 stacks). More Burn lands on
+  // Furious Outburst already applies Burn (3 stacks). More Burn lands on
   // bodies that are already burning, and the fingerprint counts stacks, not
-  // appliers.
-  'firewalking>spiralingRage': false,
+  // appliers. Spiraling Rage USED to be in here for the same reason and is
+  // not any more: once its bolt followed a real spiral it stopped flying off
+  // past the crowd, so the extra applier lands on fresh bodies.
   'firewalking>furiousOutburst': false,
 
   // Both already set `orbit: 1` in their own effect: the stones and the blades
@@ -196,21 +195,30 @@ export const EXPECT = {
   // Left as an expectation rather than "fixed", because the only fix is to
   // give trigger projectiles pierce, and that is a balance decision rather
   // than a correctness one.
+  // A spiral's reach is its `range`, full stop: the radius opens at `speed`
+  // and the bolt dies the moment it passes `range`, so going faster arrives
+  // at the same radius sooner rather than reaching further. That is how a
+  // straight projectile has always behaved too -- it only shows up here
+  // because a spiral's range is small enough to saturate inside the window.
+  // Speed Up still moves lifetime, average distance and damage on this pair.
+  'speedUp>spiralingRage': false,
+
+  // Spiraling Rage came out of this list when its bolt was retuned: at range
+  // 300 on a real spiral it survives to full reach and returns cleanly.
   'ret>gustOfWind': false,
-  'ret>spiralingRage': false,
   'messengerOfPeace>gustOfWind': false,
 };
 
 export const REASON = {
   'messengerOfPeace>spiralingRage': 'spiral takes precedence over homing in updateProjectile',
-  'firewalking>spiralingRage': 'the trigger already applies Burn',
+  'messengerOfPeace@spiral': 'spiral takes precedence over homing in updateProjectile',
   'firewalking>furiousOutburst': 'the trigger already applies Burn',
+  'speedUp>spiralingRage': 'a spiral is capped by range, so speed changes when it arrives, not how far',
   'selfCentered>solidDefense': 'the stones already orbit',
   'selfCentered>flashOfSwords': 'the blades already orbit',
   'icyWind>cruelThorns': 'the trigger already applies Chill',
   'icyWind>firstSnow': 'the trigger already applies Chill',
   'ret>gustOfWind': 'the wind ball dies on contact after 33px of its 300px range',
-  'ret>spiralingRage': 'the bolt dies on contact long before reaching full range',
   'messengerOfPeace>gustOfWind': 'the wind ball dies on contact before homing can curve it',
 };
 

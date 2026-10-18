@@ -367,7 +367,7 @@ modifiers, adapted from the Memory cards of *Echoes of Mystralia*.
 Modifier shapes worth noting, because they are what makes chains differ:
 
 - **Spawn patterns** - `Frenetic Energy` (cone), `Stars Aligned` (line),
-  `Back-and-Forth` (scattered), `Self-Centered` (orbiting), `Destructive Path`
+  `Back-and-Forth` (scattered), `Nova` (a ring), `Destructive Path`
   (burning trail), `Return`.
 - **Debuff conditionals** - `Frostbite` (vs frozen), `Deep Freeze` (vs chilled),
   `Burned to Death` (crit vs burning).

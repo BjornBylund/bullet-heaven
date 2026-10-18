@@ -35,13 +35,27 @@ creates entities in the world:
 |---|---|---|
 | **Projectile** | travels a vector from you | travel distance |
 | **Cone** | three bolts in a fan | travel distance |
-| **Burst** | expands outward from a point | radius |
+| **Spiral** | a rapid stream of curving bolts | travel distance |
+
+**Burst is no longer a playable Focus**, and neither is Field. Both survive as
+entity *kinds* — Shattering End compiles its corpse detonation from `burst`,
+and the trigger fields and the fire trail compile from `field` — which is why
+they are still in the table.
+
+**ORBITING IS GONE.** It was a rune (Self-Centered, plus two triggers that hung
+their bodies off it), then briefly a Focus, and it failed as both. The reason
+is geometry: enemies converge on the player and stop at contact range, so the
+dense part of a crowd sits within about 60px of you, and a ring at 120px is a
+donut with the fight happening in its hole. Benched against a static crowd the
+Orbit focus looked 2.7x too strong; measured in a real run with enemies
+actually chasing, it scored **zero kills in fifteen seconds** while Projectile
+scored 51. Spiral replaces it and reaches for the same thing — an effect that
+covers the space around you rather than a line you aim — without the hole.
 
 `On Spawn` fires once per **entity** the parent creates, not once per cast, so
 Cone fires it three times — once per bolt, each from that bolt's own position
 and heading. Measured when Rolling Stone still existed: Cone + Rolling Stone
-spawned 3 boulders where Projectile spawned 1. Orbiting field triggers are unaffected, because they refresh rather
-than restack: Cone + Solid Defense still yields 2 stones, not 6.
+spawned 3 boulders where Projectile spawned 1.
 
 The cost is that on-spawn nests multiply. The worst case the editor allows — a
 three-deep nest on Cone, in a 250-enemy crowd — peaks at **189 live entities and
@@ -55,21 +69,10 @@ field in elapsed time. Only the projectile reading existed at first, so the rune
 could be socketed on a Burst or a Field, charge attunement, and never fire at
 all — one of the holes the rune matrix found.
 
-`Orbiting` works the same way: it is a property of a spell, not of fields.
-Setting it routes any focus's output through the field emitter, which is the one
-path that gives each body a slot on the circle and refreshes the set instead of
-restacking it. A converted spell needs geometry it was never compiled with — a
-projectile's `range` is a travel distance, so read as an orbit radius it would
-fling the bodies 460px out and inflate each into a 200px blob — so
-`CFG.spell.orbit` supplies the missing numbers: 120px out, 30px across, in line
-with the trigger fields that already orbit. Fields keep their own reading of
-`range`, which several trigger effects depend on.
-
-**Field is no longer a playable Focus**, but it is still an entity *kind*:
-Solid Defense, Flash of Swords, Perfect Storm and the fire trail all spawn field
-entities and compile from `FOCUSES.field`. That is why the entry survives in the
-table while being absent from `FOCUS_IDS` — the table doubles as the base-stat
-block for every kind, not just the ones a player may choose.
+`FOCUSES` doubles as the base-stat block for every entity *kind*, not just the
+ones a player may choose, which is why `field` and `burst` survive in the table
+while being absent from `FOCUS_IDS`. Rubble, Perfect Storm and the fire trail
+all spawn field entities and compile from `FOCUSES.field`.
 
 Cone is the middle ground it replaced. At runtime it *is* a Projectile — same
 entity, same update path — differing only in the flags it is born with:
@@ -103,7 +106,7 @@ left the modifier pool — where builds actually differentiate — barely visibl
 
 The modifier set is deliberately narrow. Modifiers change **stats**
 (`Heavy Hitter`, `Piercing Eyes`), **spawn shape** (`Frenetic Energy`,
-`Stars Aligned`, `Self-Centered`, `Destructive Path`, `Return`), **applied
+`Stars Aligned`, `Nova`, `Destructive Path`, `Return`), **applied
 debuffs** (`Firewalking`, `Icy Wind`, `Potent Burn`), **move the crowd**
 (`Gale`, `Squall`, `Riptide`, `Windshear`, `Perfect Storm`), or
 read the **graph** itself (`Pressure Buildup`, `Empty Stomach`).
@@ -619,6 +622,10 @@ dying is worth 14 on its own) stayed at full strength for as long as the
 level-up, editor or game-over screen was up. Decay now runs from the frame loop
 on real time, which is also more correct: shake is perceived in wall-clock time,
 not simulation steps.
+
+> The two entries below are about ORBITING, which has since been removed from
+> the game entirely — see the Focus table. They are kept because the reasoning
+> is about fields and pooled geometry generally, not only about orbits.
 
 **An orbiting body missed most of what it swept through.** A field damages on
 a TICK, which asks "who is inside me right now" and ignores everything the body

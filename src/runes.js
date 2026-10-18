@@ -102,8 +102,11 @@ export const TRIGGERS = {
     name: 'Spiraling Rage', icon: '@', color: 0xff9a5c,
     tier: 'common', cost: 1, when: 'spawn',
     effect: {
-      kind: 'projectile', count: [1, 1, 2], spiral: 3.2, look: 'flame',
-      dmgPct: [0.45, 0.80, 1.50], speed: 200, range: 520, size: 11,
+      // Retuned when spiral stopped meaning "turn rate on a circle" and
+      // started meaning "sweep rate on a spiral": at the old 3.2 over a 520
+      // reach the rim speed came out above 1600px/s.
+      kind: 'projectile', count: [1, 1, 2], spiral: 1.0, look: 'flame',
+      dmgPct: [0.45, 0.80, 1.50], speed: 180, range: 300, size: 11,
       status: { idx: BURN, stacks: [1, 1, 2] },
     },
     desc: (l) => `On spawn, casts a fire projectile that spirals outward. ` +
@@ -111,14 +114,31 @@ export const TRIGGERS = {
                  `Apply ${lv([1, 1, 2], l)} Burn.`,
   },
 
-  solidDefense: {
-    name: 'Solid Defense', icon: '◆', color: 0x9aa4b2,
-    tier: 'common', cost: 1, when: 'spawn',
+  // The stone trigger has now been three things, and the first two failed the
+  // same way: they tried to make stone DEFENSIVE.
+  //
+  // Solid Defense circled the player. Bulwark planted blocking stones on every
+  // cast, which on Spiral -- five casts a second -- pinned the field cap and
+  // took incoming damage to ZERO for one attunement. Headstone moved the same
+  // blockers onto kills, which fixed the numbers and left a rune nobody
+  // wanted to socket. Shot-blocking is gone from the game entirely now.
+  //
+  // What stone is actually for is Brittle: it does not kill anything, it
+  // makes everything else hurt more. So the trigger lays broken ground where
+  // the spell lands and anything standing in it is softened. Firing on HIT
+  // means the field goes where the fight already is, which is the one place a
+  // debuff zone is worth having.
+  rubble: {
+    name: 'Rubble', icon: '◆', color: 0x9aa4b2,
+    tier: 'rare', cost: 2, when: 'hit',
     effect: {
-      kind: 'field', count: [2, 2, 3], orbit: true, look: 'stone', blocks: true,
-      dmgPct: [0.60, 0.60, 0.60], range: 90, life: 5.5, tick: 0.3, size: 26,
+      kind: 'field', count: 1, look: 'rubble',
+      dmgPct: [0.18, 0.22, 0.30], range: 44, life: 1.8, tick: 0.35,
+      status: { idx: BRITTLE, stacks: [1, 1, 2] },
     },
-    desc: (l) => `On spawn, sets ${lv([2, 2, 3], l)} stones orbiting you. Damage 60%.`,
+    desc: (l) => `On hit, breaks the ground underfoot. ` +
+                 `Damage ${Math.round(lv([0.18, 0.22, 0.30], l) * 100)}% per tick · ` +
+                 `Apply ${lv([1, 1, 2], l)} Brittle.`,
   },
 
   gustOfWind: {
@@ -132,16 +152,18 @@ export const TRIGGERS = {
                  `Damage ${Math.round(lv([0.30, 0.45, 0.70], l) * 100)}%.`,
   },
 
-  flashOfSwords: {
-    name: 'Flash of Swords', icon: '⚔', color: 0xffe066,
+  // Was Flash of Swords, which spun its blades in a ring around the player.
+  // Same blades, thrown outward instead of orbited.
+  bladestorm: {
+    name: 'Bladestorm', icon: '⚔', color: 0xffe066,
     tier: 'rare', cost: 2, when: 'spawn',
     effect: {
-      kind: 'field', count: [2, 3, 4], orbit: true, look: 'blade',
-      dmgPct: [0.20, 0.35, 0.60], range: 130, life: 3.2, tick: 0.22, size: 20,
+      kind: 'projectile', count: [3, 4, 6], ring: true, look: 'blade',
+      dmgPct: [0.22, 0.38, 0.65], speed: 420, range: 300, size: 18, pierce: 2,
       crit: [0.05, 0.10, 0.20],
     },
-    desc: (l) => `On spawn, spins ${lv([2, 3, 4], l)} blades around you. ` +
-                 `Damage ${Math.round(lv([0.20, 0.35, 0.60], l) * 100)}% · ` +
+    desc: (l) => `On spawn, throws ${lv([3, 4, 6], l)} blades outward. ` +
+                 `Damage ${Math.round(lv([0.22, 0.38, 0.65], l) * 100)}% · ` +
                  `Critical ${pct(lv([0.05, 0.10, 0.20], l))}.`,
   },
 
@@ -289,19 +311,24 @@ export const MODIFIERS = {
     desc: (l) => `Spawn count +${lv([1, 2, 3], l)} around the origin · Speed −30%.`,
   },
 
-  selfCentered: {
-    name: 'Self-Centered', icon: '◌', color: 0xb0a48c,
+  // Replaces Self-Centered, which bolted orbiting movement onto any spell.
+  // Orbiting is gone from the game entirely -- see the Spiral focus.
+  //
+  // `ring` was the one spawn shape no modifier reached: Stars Aligned lays
+  // copies in a line, Frenetic Energy fans them into a cone, Back-and-Forth
+  // scatters them, and nothing fired them evenly in every direction. So the
+  // epic that used to put bodies all around you still does, just all at once
+  // and outward.
+  nova: {
+    name: 'Nova', icon: '✺', color: 0xffd36e,
     tier: 'epic', cost: 3,
     apply: (c, l) => {
-      c.flags.orbit = Math.max(1, c.flags.orbit);
-      c.flags.split += lv([1, 2, 3], l);
-      c.stats.life = (c.stats.life || 2) * (1 + lv([0.8, 1.5, 2.7], l));
+      c.flags.split += lv([3, 4, 6], l);
+      c.flags.ring = 1;
+      c.stats.dmg *= 1 - lv([0.30, 0.26, 0.20], l);
     },
-    // The size reduction is stated because it used to be silent: socketing this
-    // on a Field shrank it and players read that as their size runes failing.
-    desc: (l) => `Adds orbiting movement · Spawn count +${lv([1, 2, 3], l)} · ` +
-                 `Duration ${pct(lv([0.8, 1.5, 2.7], l))} · ` +
-                 `An orbiting area is smaller than a still one.`,
+    desc: (l) => `Spawn count +${lv([3, 4, 6], l)}, fired evenly in every ` +
+                 `direction · Damage −${Math.round(lv([0.30, 0.26, 0.20], l) * 100)}%.`,
   },
 
   firewalking: {
@@ -515,7 +542,7 @@ export const ELEMENTS = {
   ice:   ['firstSnow', 'cruelThorns', 'icyWind', 'deepFreeze',
           'hoarfrost', 'absoluteZero'],
   air:   ['gustOfWind', 'perfectStorm', 'gale', 'squall', 'riptide', 'windshear'],
-  stone: ['solidDefense', 'shatteringEnd', 'heavyBurden', 'silentGrudge',
+  stone: ['rubble', 'shatteringEnd', 'heavyBurden', 'silentGrudge',
           'fracture', 'monolith'],
 };
 

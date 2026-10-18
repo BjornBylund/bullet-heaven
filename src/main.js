@@ -77,6 +77,10 @@ async function boot() {
 
   G.layers = {
     gems: new PIXI.Container(),
+    // Ground marks, BENEATH the crowd. A field drawn over the enemies hides
+    // the thing it is supposed to be softening, which is the whole reason to
+    // walk into it; under them it is scenery you read at a glance instead.
+    decals: new PIXI.Container(),
     enemies: new PIXI.Container(),
     // health bars sit above the crowd so a wounded heavy is never buried
     bars: new PIXI.Container(),
@@ -86,7 +90,7 @@ async function boot() {
     proj: new PIXI.Container(),
     fx: new PIXI.Container(),
   };
-  for (const k of ['gems', 'enemies', 'bars', 'player', 'shots', 'proj', 'fx']) {
+  for (const k of ['gems', 'decals', 'enemies', 'bars', 'player', 'shots', 'proj', 'fx']) {
     world.addChild(G.layers[k]);
   }
 

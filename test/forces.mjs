@@ -1,7 +1,6 @@
 /**
  * Physical interactions the rune matrix cannot see: forces applied to enemies,
- * stones blocking enemy fire, and whether a MOVING body actually hits what it
- * sweeps through.
+ * and stones blocking enemy fire.
  *
  * These live apart from the rune matrix because the matrix cannot see them.
  * Its world deliberately never calls `updateEnemies` -- a chasing crowd
@@ -217,93 +216,6 @@ console.log('\nGale shoves what it hits');
   // Riptide is Gale with the sign flipped: `damageEnemy` pushes along the
   // vector away from the hit, so a negative knock drags the body toward it.
   check('Riptide drags them the other way', riptide < -50, `${riptide.toFixed(1)}px`);
-}
-
-// ---------------------------------------------------------------------------
-console.log('\na stone stops one shot and is spent doing it');
-{
-  const { fireShot, HOSTILE } = await import('../src/shots.js');
-  const { updateShots } = await import('../src/shots.js');
-  const { compile } = await import('../src/spell.js');
-
-  const shot = () => ({ speed: 200, dmg: 10, r: 9, life: 9, tint: HOSTILE.mid });
-
-  const eff = compile({ focus: 'projectile', children: [{ id: 'solidDefense', level: 3, children: [] }] }, CAPS)
-    .triggers[0].spell;
-  check('Solid Defense is flagged as a blocker', !!eff.flags.blocks);
-
-  const run = (shots) => {
-    createWorld({ crowd: 0, atSeconds: 120 });
-    G.player.x = 0; G.player.y = 0;
-    const hp0 = G.player.hp;
-    castSpell(eff, 0, 0, 0);
-    const stones = G.spellEntities.active.filter((e) => e.alive);
-    // Spacing and window both kept well inside the stones' 5.5s lifetime. An
-    // earlier version ran six seconds and watched them EXPIRE, which reads
-    // exactly like three stones spent on one shot.
-    for (let i = 0; i < shots; i++) fireShot(300 + i * 90, 0, Math.PI, shot(), true);
-    for (let i = 0; i < 60 * 4; i++) {
-      G.grid.clear();
-      for (const q of G.enemies.active) if (q.alive) G.grid.insert(q);
-      updateSpellEntities(STEP);
-      updateShots(STEP);
-      G.shots.sweep((q) => { q.s.visible = false; q.glow.visible = false; });
-    }
-    return { out: stones.length, left: stones.filter((e) => e.alive).length, hurt: hp0 - G.player.hp };
-  };
-
-  // One stone per shot -- three stones really do stop three shots, which an
-  // earlier version of this test got wrong by firing two and expecting one to
-  // be spent.
-  const one = run(1);
-  check('one shot spends exactly one stone', one.out - one.left === 1, `${one.out} -> ${one.left}`);
-  check('and the player is untouched', one.hurt === 0, `took ${Math.round(one.hurt)}`);
-
-  // Under sustained fire more stones go, and shots start getting through.
-  //
-  // NOT all of them: the stones ORBIT, so a shield made of three moving bodies
-  // is a probabilistic one and fire can slip between them. That is the real
-  // behaviour, and an earlier version of this test asserted a wall instead.
-  const over = run(4);
-  check('heavier fire spends more stones', over.out - over.left > one.out - one.left,
-    `${over.out} -> ${over.left} under four shots`);
-  check('and some of it gets through', over.hurt > 0, `took ${Math.round(over.hurt)} damage`);
-}
-
-// ---------------------------------------------------------------------------
-console.log('\nan orbiting body hits everything it sweeps through');
-{
-  const { updateSpellbook } = await import('../src/spellbook.js');
-
-  // A ring of stationary enemies at the orbit radius. Every one of them is
-  // swept by the same bodies the same number of times, so they should take
-  // comparable damage -- and before orbiting bodies hit on contact they did
-  // not. The damage tick is an INSTANT, and a body that advances 60 degrees of
-  // its circle between ticks while covering only 28 simply misses most of the
-  // ring. Measured then: 60 to 120 across a ring that should have been even.
-  const ring = (tree) => {
-    createWorld({ focus: 'projectile', tree, crowd: 0, atSeconds: 120, seed: 5 });
-    G.player.x = 0; G.player.y = 0;
-    updateSpellbook(STEP); updateSpellEntities(STEP);
-    const body = G.spellEntities.active.find((e) => e.alive && e.c.flags.orbit);
-    if (!body) return null;
-    const dist = Math.hypot(body.x, body.y);
-    const marks = [];
-    for (let i = 0; i < 24; i++) {
-      const a = (i / 24) * Math.PI * 2;
-      const e = spawnEnemy('zombie', Math.cos(a) * dist, Math.sin(a) * dist);
-      e.maxHp = e.hp = 1e9; e.speed = 0;
-      marks.push(e);
-    }
-    for (let i = 0; i < 60 * 6; i++) { updateSpellbook(STEP); step(); }
-    const dmg = marks.map((e) => e.maxHp - e.hp);
-    return { hit: dmg.filter((d) => d > 0).length, lo: Math.min(...dmg), hi: Math.max(...dmg) };
-  };
-
-  const r = ring([{ id: 'selfCentered', level: 3, children: [] }]);
-  check('every enemy on the ring is hit', r && r.hit === 24, r ? `${r.hit}/24` : 'no orbit');
-  check('and they take comparable damage', r && r.hi <= r.lo * 1.6,
-    r ? `${Math.round(r.lo)} to ${Math.round(r.hi)}` : '-');
 }
 
 console.log(failures ? `\n${failures} failing` : '\nall force checks pass');
