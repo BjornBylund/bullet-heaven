@@ -107,6 +107,7 @@
   .card .pill { display:inline-block; margin-top:7px; font-size:10px; letter-spacing:1px;
     padding:2px 9px; border-radius:20px; background:#1b2436; color:#9fc4ff; }
   .card .pill.new { background:#1d3a2a; color:#79e0a4; }
+  .card .pill.lvl { background:#3a2f16; color:#ffd36e; margin-left:5px; }
   .card .ds { font-size:11.5px; color:#8ea0bb; margin-top:10px; line-height:1.55; min-height:50px; }
   .card kbd { display:inline-block; margin-top:8px; font-size:10px; color:#64748b;
     border:1px solid #2a3547; border-radius:4px; padding:1px 6px; }
@@ -137,6 +138,8 @@
   .tutkind .pill { flex:none; display:inline-block; font-size:10px; letter-spacing:1px;
     padding:2px 9px; border-radius:20px; background:#1b2436; color:#9fc4ff; }
   .tutkind .pill.trg { background:#1d3a2a; color:#79e0a4; }
+  #tutbody .pill.lvl { display:inline-block; font-size:10px; letter-spacing:1px;
+    padding:2px 9px; border-radius:20px; background:#3a2f16; color:#ffd36e; }
   #tutbody .note { border-left:2px solid #4d8fff; padding-left:12px; color:#bcd9ff; }
 
   /* ---- high scores ---- */
@@ -392,6 +395,11 @@
            modifies <b>that trigger</b>, not the spell above it. That is the whole game.</p>
         <p>Two limits, shown in the editor: <b>sockets</b> are how many runes fit,
            <b>focus</b> is what they cost.</p>
+        <p><b>A second copy levels one up.</b> Take a rune you already have
+           socketed and the duplicate can be spent in the editor to raise it,
+           up to <b>level 3</b> &mdash; stronger numbers, no extra socket, but
+           one more focus each time. Cards that can do this are marked
+           <span class="pill lvl">&uarr; LV 2</span> on the level-up screen.</p>
       </div>
       <button class="btn" id="tutclose">GOT IT</button>
     </div>

@@ -1,7 +1,8 @@
 import { G } from './state.js';
 import { CFG } from './config.js';
 import { FOCUSES, FOCUS_IDS } from './focuses.js';
-import { RUNES, RUNE_IDS, TRIGGER_IDS, TIERS } from './runes.js';
+import { RUNES, RUNE_IDS, TRIGGER_IDS, TIERS, MAX_RUNE_LEVEL } from './runes.js';
+import { walkNodes } from './spell.js';
 import { heal, addGold } from './progress.js';
 import {
   book, caps, canAddSpell, addSpell, grantRune, runeCount,
@@ -35,15 +36,42 @@ function tierWeight(tier) {
   return base;
 }
 
+/**
+ * The lowest level this rune is socketed at anywhere in the book, or -1.
+ *
+ * The LOWEST, because that is the copy another duplicate helps most.
+ */
+function socketedLevel(id) {
+  let lowest = Infinity;
+  for (const entry of book().spells) {
+    for (const n of walkNodes(entry.spell)) {
+      if (n.node.id === id && n.node.level < lowest) lowest = n.node.level;
+    }
+  }
+  return lowest === Infinity ? -1 : lowest;
+}
+
+/**
+ * A card for a rune in play has to read differently from a card for one the
+ * player has never seen, and it did not.
+ *
+ * `isNew` was `held === 0`, which is inventory count -- and placing a rune
+ * takes it OUT of the inventory. So every rune already socketed in your build
+ * came back marked NEW, while the one fact that mattered about it, that a
+ * duplicate is the only way to raise its level, went unsaid. Both now key off
+ * the build rather than the bag.
+ */
 function runeCard(id, weight) {
   const def = RUNES[id];
   const held = runeCount(id);
+  const at = socketedLevel(id);
   return {
     kind: 'rune', id, weight,
     icon: def.icon, name: def.name, color: def.color,
     tier: def.tier,
     tag: `${TIERS[def.tier].name} ${def.kind === 'trigger' ? 'Trigger' : 'Modifier'}`,
-    isNew: held === 0,
+    isNew: held === 0 && at < 0,
+    levelsTo: at >= 0 && at < MAX_RUNE_LEVEL ? at + 1 : 0,
     sub: def.cost > 0 ? `${def.cost} focus` : 'free',
     desc: def.desc(1),
   };

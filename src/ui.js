@@ -309,6 +309,10 @@ export function showLevelUp(done) {
       `<div class="ico" style="color:${hex(c.color)}">${c.icon}</div>` +
       `<div class="nm">${c.name}</div>` +
       `<div class="pill ${c.isNew ? 'new' : ''}">${c.tag || '&nbsp;'}</div>` +
+      // Taking a duplicate is the only way to raise a rune, so the card has to
+      // say which ones would do it. Without this the screen gave a rune you
+      // already run and a rune you have never seen exactly the same billing.
+      (c.levelsTo ? `<div class="pill lvl">&uarr; LV ${c.levelsTo}</div>` : '') +
       `<div class="ds">${c.desc}</div>` +
       (c.sub ? `<div class="csub">${c.sub}</div>` : '') +
       `<kbd>${i + 1}</kbd>`;
