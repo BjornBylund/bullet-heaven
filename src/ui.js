@@ -218,7 +218,12 @@ function updateBossHud() {
   const b = G.boss;
   // The Ruin gets no health bar. An invulnerable boss with a full bar reads as
   // a boss you are failing to damage, which is a worse lie than no bar at all.
-  const live = !!(b && b.alive && !(b.bossDef && b.bossDef.final));
+  // `b.bossDef` is required, not assumed. Entities are pooled, so a stale
+  // `G.boss` pointing at a slot that has since been recycled into an ordinary
+  // enemy reads as alive with no definition on it -- and this drew its name
+  // one line later. The same stale-pooled-field hazard that once made a zombie
+  // invulnerable.
+  const live = !!(b && b.alive && b.bossDef && !b.bossDef.final);
   el.bosswrap.classList.toggle('show', live);
   if (live) {
     if (shownBoss !== b) {
