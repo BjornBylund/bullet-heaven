@@ -116,7 +116,7 @@ export function initCasting() {
       x: 0, y: 0, vx: 0, vy: 0, angle: 0,
       dmg: 0, radius: 0, baseRadius: 0, prevRadius: 0,
       range: 0, travelled: 0, age: 0, life: 0,
-      hits: 0, distFired: false, returning: false, trailAcc: 0, look: null,
+      hits: 0, distAcc: 0, returning: false, trailAcc: 0, look: null,
       // Bodies already hit. Grows on demand (see claim) because a Burst has no
       // pierce limit -- it touches everything inside its radius, which in a
       // late-run crowd is several hundred. The array lives on the pooled entity
@@ -255,22 +255,39 @@ const FIELD_SPRITE_SCALE = 2.3;
 const FIELD_REACH = FIELD_SPRITE_SCALE / 2;
 
 /**
- * How far through its own life an entity is when the DISTANCE condition fires.
+ * How far an entity covers between DISTANCE firings, in PIXELS.
  *
- * "Distance" is really "partway through", and each kind measures that in the
- * only units it has: a projectile in travel, a burst in how far the shockwave
- * has expanded, a field in elapsed life. Only the projectile reading existed,
- * which meant a Distance trigger socketed on a Burst or a Field could never
- * fire at all -- the editor offered it, it charged attunement, and nothing
- * ever happened.
+ * This used to be a fraction -- fire once, at 60% of the way through -- which
+ * made "distance" mean "partway through" and tied the trigger to the shape of
+ * whatever carried it rather than to how far that thing actually went. A bolt
+ * crossing 620px and one crossing 300px both fired exactly once, so investing
+ * in range bought a Distance trigger nothing at all.
+ *
+ * In pixels it does what the name says: the further it travels, the more it
+ * drops. Long-range builds get several castings strung out along the flight
+ * path instead of one at an arbitrary waypoint.
+ *
+ * Each kind still contributes the only units it has -- a projectile its
+ * travel, a burst how far its edge has swept, a field how far it has drifted.
+ * An ANCHORED field contributes nothing, because it does not go anywhere, and
+ * that is the honest answer rather than the old one where elapsed life was
+ * quietly dressed up as distance.
  */
-const DISTANCE_AT = 0.6;
+const DISTANCE_EVERY = 160;
 
-/** Fires the distance condition once, the first time `progress` passes it. */
-function checkDistance(ent, c, progress) {
-  if (ent.distFired || progress < DISTANCE_AT) return;
-  ent.distFired = true;
-  fireTriggers(ent, c, 'distance', ent.x, ent.y, ent.angle);
+/** Bound on firings per frame, so one huge step cannot spawn a pile at once. */
+const DISTANCE_MAX_PER_FRAME = 4;
+
+/** Banks the units an entity just covered and fires for each full interval. */
+function checkDistance(ent, c, advanced) {
+  if (!(advanced > 0)) return;
+  ent.distAcc += advanced;
+  for (let i = 0; i < DISTANCE_MAX_PER_FRAME && ent.distAcc >= DISTANCE_EVERY; i++) {
+    ent.distAcc -= DISTANCE_EVERY;
+    fireTriggers(ent, c, 'distance', ent.x, ent.y, ent.angle);
+    // a trigger can end its own source -- a Burst that expired inside the call
+    if (!ent.alive) return;
+  }
 }
 
 function spawn(c, x, y, angle, copyIndex) {
@@ -288,7 +305,7 @@ function spawn(c, x, y, angle, copyIndex) {
   e.hits = 0;
   e.hitCount = 0;
   e.trigFired = 0;
-  e.distFired = false;
+  e.distAcc = 0;
   e.returning = false;
   e.trailAcc = 0;
   e.age = 0;
@@ -573,7 +590,7 @@ function updateProjectile(ent, dt, near) {
     s.width = s.height = ent.radius * 2.5;
   }
 
-  checkDistance(ent, c, ent.travelled / Math.max(1, ent.range));
+  checkDistance(ent, c, sp * dt);
   if (!ent.returning && ent.travelled >= ent.range) {
     if (f.returns) ent.returning = true;
     else { ent.alive = false; return; }
@@ -603,7 +620,7 @@ function updateBurst(ent, dt, near) {
   ent.prevRadius = ent.radius;
   ent.radius = ent.range * Math.min(1, ent.age / c.stats.expand);
 
-  checkDistance(ent, c, ent.age / Math.max(0.01, c.stats.expand));
+  checkDistance(ent, c, ent.radius - ent.prevRadius);
 
   const s = ent.s;
   s.width = s.height = ent.radius * 2;
@@ -640,9 +657,12 @@ function updateField(ent, dt, near, p) {
   if (ent.life <= 0) { ent.alive = false; return; }
   ent.age += dt;
 
-  checkDistance(ent, c, ent.age / Math.max(0.01, c.stats.life));
-
   if (!f.anchor) {
+    // How far it DRIFTED, which for a following field is how far the player
+    // walked. An anchored one contributes nothing and never fires Distance,
+    // which is correct: it is standing still.
+    checkDistance(ent, c, Math.hypot(p.x - ent.x, p.y - ent.y));
+    if (!ent.alive) return;
     ent.x = p.x;
     ent.y = p.y;
   }

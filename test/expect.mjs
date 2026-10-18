@@ -205,6 +205,16 @@ export const EXPECT = {
 
   // Spiraling Rage came out of this list when its bolt was retuned: at range
   // 300 on a real spiral it survives to full reach and returns cleanly.
+  // Distance is counted in PIXELS TRAVELLED now, and a field does not travel.
+  // Every field in the game is anchored -- spell.js sets `anchor` on any
+  // trigger whose effect is a field, and the field Focus is not playable --
+  // so a Distance trigger nested under one can never fire.
+  //
+  // Listed rather than fixed, because the alternatives are worse: giving an
+  // anchored field a notional distance would put back exactly the "elapsed
+  // life dressed up as travel" that counting pixels was meant to remove.
+  'gustOfWind@field': false,
+
   'ret>gustOfWind': false,
   'messengerOfPeace>gustOfWind': false,
 };
@@ -218,6 +228,7 @@ export const REASON = {
   'selfCentered>flashOfSwords': 'the blades already orbit',
   'icyWind>cruelThorns': 'the trigger already applies Chill',
   'icyWind>firstSnow': 'the trigger already applies Chill',
+  'gustOfWind@field': 'a field is anchored, so it never covers any distance',
   'ret>gustOfWind': 'the wind ball dies on contact after 33px of its 300px range',
   'messengerOfPeace>gustOfWind': 'the wind ball dies on contact before homing can curve it',
 };
