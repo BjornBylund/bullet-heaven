@@ -49,6 +49,11 @@ let open = false;
 let sel = 0;
 let pick = null;        // inventory rune selected by clicking
 let focused = null;     // inspected graph node key
+// Which selection the detail panel is showing. A rune clicked in the bag has
+// no graph node to focus, so it needs its own handle -- `pick` cannot serve,
+// because that survives clicking around the tree so the rune stays armed for
+// placement, and the panel must follow the last thing actually clicked.
+let inspect = null;     // { kind:'inv', id } | null, meaning follow `focused`
 let drag = null;        // { kind:'inv', id } | { kind:'node', path }
 let msg = '';
 let msgErr = false;
@@ -196,6 +201,7 @@ export function openEditor() {
   open = true;
   sel = Math.min(sel, G.player.book.spells.length - 1);
   focused = 'focus';
+  inspect = null;
   el.panel.classList.add('show');
   render();
 }
@@ -203,6 +209,7 @@ export function openEditor() {
 export function closeEditor() {
   open = false;
   pick = null;
+  inspect = null;
   cancelDrag();
   msg = '';
   el.panel.classList.remove('show');
@@ -247,6 +254,13 @@ export function refreshNag() {
 // ---------------------------------------------------------------------------
 
 /**
+ * A graph node's key, from its path. Written down once because `focused` is
+ * compared against it from outside buildGraph, and an open-coded second
+ * spelling of the format silently focuses nothing.
+ */
+const nodeKey = (path) => (path.length ? 'n' + path.join('_') : 'focus');
+
+/**
  * Tidy tree layout: children are laid out left to right, and a parent centres
  * itself over the span of its children. Empty link slots are laid out as
  * children too, so free capacity is visible in the shape of the graph.
@@ -257,7 +271,7 @@ function buildGraph(spell) {
   let cursor = 0;
 
   function place(node, path, depth, parentKey) {
-    const key = path.length ? 'n' + path.join('_') : 'focus';
+    const key = nodeKey(path);
     const spans = [];
 
     node.children.forEach((c, i) => {
@@ -447,12 +461,15 @@ function onNodeClick(n, targetPath) {
       const id = pick;
       act(tryPlace(sel, targetPath, id));
       if ((book().inventory[id] || 0) === 0) pick = null;
+      // it is in the tree now, so the tree owns the panel
+      inspect = null;
+      focused = nodeKey(targetPath);
       render();
       return;
     }
     say(check.reason, true);
   }
-  if (n.type !== 'empty') focused = n.key;
+  if (n.type !== 'empty') { focused = n.key; inspect = null; }
   render();
 }
 
@@ -463,6 +480,37 @@ function onNodeClick(n, targetPath) {
 function renderDetail(b) {
   const entry = b.spells[sel];
   el.left.innerHTML = '<h3>SELECTED</h3>';
+
+  // A rune in the bag reads exactly like one in the tree, minus the things
+  // that only exist once it is placed: no level, no links, and no owner to
+  // scale off. Clicking it used to highlight the chip and say nothing, so the
+  // only way to find out what a rune did was to socket it and look.
+  if (inspect && inspect.kind === 'inv') {
+    const rd = RUNES[inspect.id];
+    // The last copy can leave the bag while it is being inspected -- placed,
+    // or spent levelling something -- so the count is checked, not assumed.
+    if (rd && (b.inventory[inspect.id] || 0) > 0) {
+      el.left.appendChild(card({
+        tier: rd.tier,
+        kindLabel: `${TIERS[rd.tier].name} ${rd.kind === 'trigger' ? 'Trigger' : 'Modifier'}`,
+        name: rd.name, color: rd.color,
+        when: rd.kind === 'trigger' ? WHEN_LABEL[rd.when] : null,
+        desc: rd.desc(1) +
+          (runePenaltyPct(inspect.id)
+            ? ` <b class="pen">Its own damage is reduced ` +
+              `${runePenaltyPct(inspect.id)}%, and everything under it.</b>`
+            : ''),
+        stats: [
+          ['Focus cost', runeCost(inspect.id, 1)],
+          ['In the bag', `${b.inventory[inspect.id] || 0}`],
+        ],
+        foot: 'Not placed yet. Click a socket, or drag it onto the graph.',
+      }));
+      return;
+    }
+    inspect = null;
+  }
+
   if (!entry || !graph) return;
 
   const n = graph.nodes.find((x) => x.key === focused);
@@ -626,6 +674,7 @@ function renderInventory(b) {
     d.addEventListener('click', () => {
       if (justDragged) { justDragged = false; return; }
       pick = pick === id ? null : id;
+      inspect = pick ? { kind: 'inv', id } : null;
       say('');
       render();
     });
